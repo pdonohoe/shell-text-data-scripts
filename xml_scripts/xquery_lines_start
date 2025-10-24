@@ -1,0 +1,15 @@
+let $currpath:="CURRPATH"
+let $stringlist:="LINELISTSTRING"
+let $lines:=fn:tokenize(fn:replace($stringlist, "[\n\r]+", ""), "£")
+for $line in $lines
+let $items := fn:tokenize($line, "&#09;")
+let $file := $items[1]
+let $winfile:= if (fn:substring($file, 1, 1) eq "/") then $file else fn:concat($currpath, "/", $file)
+let $winfile:=fn:replace($winfile, "^/([A-Za-z])/","/$1:/")
+let $currpath:=fn:replace($currpath, "^/([A-Za-z])/","/$1:/")
+let $doc:=fn:doc($winfile)
+let $root:=$doc/*
+ 
+ 
+
+ 

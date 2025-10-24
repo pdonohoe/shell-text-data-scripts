@@ -1,0 +1,2 @@
+#!/bin/sh
+awk 'BEGIN {pos=1} END { for (mypos = 1; mypos < pos; mypos++) { item = myarray[mypos]; print (myhash[item], "\t", item); } } { if (!($0 in myhash)) { myarray[pos]=$0; pos++; }; myhash[$0]++; }'

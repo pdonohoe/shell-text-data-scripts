@@ -1,0 +1,137 @@
+#!/bin/bash
+# This script prettifies a list of given XML files.
+# Requirements: Perl, Java, Saxon HE Java implementation of XQuery (minimum version saxon9he.jar and xml-resolver-1.2.jar)
+
+# Global variables required: JAVA_OPTIONS, XQUERY_CLASS_PATH, XQUERY_CLASS, XPRETTY_OPTIONS
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+help_usage="
+
+$command_name executes the given constructed XQuery on the given list of strings. 
+The first column of each string is assumed to be a file to be processed.
+
+$command_name -s pathexp -r replace_path_exp xml_file [ ... xml_file ]
+[ list of XML files ] | $command_name  -s pathexp -r replace_path_exp
+
+REQUIRED OPTIONS:
+-s      partial path in source files to search for
+-r      partial path to replace to get new output file path
+
+
+Examples: 
+$command_name -s '/' -r '-pretty/'
+
+
+";
+
+# set query variables to empty values
+source_path_exp="";replace_path_exp="";
+xquery_file="${script_path}/xpretty_query";
+test_query=0;
+
+query='';
+
+# get a dummy XML file to supply to the XMLfile parameter required for the Saxon XQuery implementation
+xml_file="${script_path}/empty.xml"
+
+# use a temporary XML file to hold the XQuery output before splitting into individual files
+temp_out_file="xpretty_files_temp.xml"
+
+# read command options
+while getopts "ts:r:h?" getopts_option
+do
+  case $getopts_option in
+    t ) test_query=1;;
+    s ) source_path_exp="$OPTARG";;
+    r ) replace_path_exp="$OPTARG";;
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# validate options
+# source path expression is required
+[ "$source_path_exp" = "" ] && echo "-s (source path expression) is required;$help_usage" 1>&2 && exit 2;
+# replace path expression is required
+[ "$replace_path_exp" = "" ] && echo "-r (replace path expression) is required;$help_usage" 1>&2 && exit 3;
+
+# replace path expression must not equal source path expression
+[ "$replace_path_exp" = "$source_path_exp" ] && echo "-r (replace path expression) must be different from -s (source path expression);$help_usage" 1>&2 && exit 0;
+
+
+# xquery_file file must exist
+if [ ! -e "$xquery_file" ]; then
+	echo "ERROR: $command_name: Can't find required xquery file for processing files $xquery_file" 1>&2; 
+	exit 4 ;
+fi;
+
+# read xquery from file
+query=$(cat "$xquery_file");
+
+# get the list of files as a string delimited with £, either from parameters to the command, or if none, from STDIN
+file_list_string="";
+# get list of files into a string
+case $# in
+	# no files given as parameters to command, use STDIN
+	0) num_lines=0;
+		while IFS="$(printf '\n')" read -r file; do
+			file_list_string="$file_list_string$file";
+			num_lines=$((num_lines+1));
+		done;;
+	*) num_lines=$#; file_list_string="$(for i in "$@"; do echo -n "£$i"; done;)";
+esac;
+
+# remove first character of file_list_string
+file_list_string=$(printf %s "$file_list_string" | sed 's%^.%%');
+
+# check that all files actually exist
+filelist=();
+IFS='£' read -ra filelist <<< "$file_list_string";
+for file in "${filelist[@]}"; do
+[ ! -e  "$file" ] && echo "ERROR: $command_name: cant find file $file" && exit 5;
+done
+
+# substitute list of files into xquery
+query="${query%%FILELISTSTRING*}${file_list_string}${query##*FILELISTSTRING}";
+
+# substitute source path expression into query
+query="${query%%SOURCEPATHEXP*}${source_path_exp}${query##*SOURCEPATHEXP}";
+
+# substitute replace path expression into query
+query="${query%%REPLACEPATHEXP*}${replace_path_exp}${query##*REPLACEPATHEXP}";
+
+# run xquery, get raw result
+#echo ":$query:" 1>&2;
+if [ "$test_query" = 1 ]; then
+    echo "java -cp $XQUERY_CLASS_PATH $XQUERY_CLASS $XPRETTY_OPTIONS -s:$xml_file -qs:$query";
+else
+    java -cp "$XQUERY_CLASS_PATH" $XQUERY_CLASS $XPRETTY_OPTIONS -s:"$xml_file" -qs:"$query" | sed -n -f "${script_path}/fix_xml_pretty.sed" > "$temp_out_file"
+    
+    perl -ne 'BEGIN {use File::Path qw(make_path); $file_exists=0; $xml_prolog="<?xml version=\"1.0\" encoding=\"UTF-8\"?>";  }
+    $line=$_;
+    if ($line =~ m%<xqpfile>%) { 
+        ($out_file) = $line =~ m%<xqpfile>(.*)</xqpfile>%; 
+        if (-e "$out_file") {
+            print STDERR "Cant overwrite file $out_file\n";
+            $file_exists=0;
+        } else {
+            ($out_fol) = $out_file =~ m%^(.*)/%;
+            make_path("$out_fol");
+            print STDERR "Writing: $out_file\n";
+            open($fh_out, ">", $out_file) or die "Cant write to output file path $out_file\n";
+            print $fh_out "${xml_prolog}\n";
+            $file_exists=1;
+        };
+    } elsif ($file_exists == 1 && $line ne "") {
+        print $fh_out "$line";
+    }' "$temp_out_file";
+    # delete temporary XML file
+    [ -e "$temp_out_file" ] && rm "$temp_out_file";
+fi;
+exit 0;

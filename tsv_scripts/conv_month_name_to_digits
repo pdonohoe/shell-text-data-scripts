@@ -1,0 +1,81 @@
+#!/bin/sh
+command_name=$(basename "$0");
+help_usage="
+SYNTAX: $command_name [ -l LANGUAGE ] name [ ... name ]
+
+For each month name or abbreviation given as a parameter, returns the digit in a new line
+Invalid values are returned with no error
+
+ Options
+    
+  -l LANGUAGE (OPTIONAL) 
+         Returns the month abbreviations in the given language
+     Values accepted: 
+     E e ENG eng - English
+     F f FRE fre - French
+     
+     Default English
+
+";
+opt_language="E";
+while getopts "l:h?" getopts_option
+do
+  case $getopts_option in
+    l ) opt_language="$OPTARG";;
+    h | \? ) echo "$help_usage"; exit 0;;
+  esac
+done
+# Move argument pointer to next.
+shift $((OPTIND - 1));
+
+# validate language option
+case $opt_language in
+e|E|ENG|eng )
+  language="ENG";;
+f|F|FRE|fre )
+  language="FRE";;
+* ) echo "ERROR: $command_name: invalid language, expecting one of:
+e|E|ENG|eng|f|F|FRE|fre" 1>&2;
+exit 1;;
+esac;
+
+case $language in 
+ENG )
+  for name ; do
+    case "$name" in 
+      "Jan" | "January" ) echo "01";;
+      "Feb" | "February" ) echo "02";;
+      "Mar" | "March" ) echo "03";;
+      "Apr" | "April" ) echo "04";;
+      "May" ) echo "05";;
+      "Jun" | "June" ) echo "06";;
+      "Jul" | "July" ) echo "07";;
+      "Aug" | "August" ) echo "08";;
+      "Sep" | "September" ) echo "09";;
+      "Oct" | "October" ) echo "10";;
+      "Nov" | "November" ) echo "11";;
+      "Dec" | "December" ) echo "12";;
+      * ) echo "$name";;
+    esac;
+  done;;
+FRE )
+  for name ; do
+    case "$name" in 
+      "janv" | "janvier" ) echo "01";;
+      "févr" | "février" | "fevr" | "fevrier") echo "02";;
+      "mars" ) echo "03";;
+      "avril" ) echo "04";;
+      "mai" ) echo "05";;
+      "juin" ) echo "06";;
+      "juil" | "juillet" ) echo "07";;
+      "août" | "aout" ) echo "08";;
+      "sept" | "septembre" ) echo "09";;
+      "oct" | "octobre" ) echo "10";;
+      "nov" | "novembre" ) echo "11";;
+      "déc" | "décembre" | "dec" | "decembre") echo "12";;
+      * ) echo "$name";;
+    esac;
+  done;;
+esac;
+
+

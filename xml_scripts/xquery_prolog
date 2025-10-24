@@ -1,0 +1,4 @@
+
+let $doc := /self::document-node()
+let $root := $doc/*
+let $file := base-uri($doc)

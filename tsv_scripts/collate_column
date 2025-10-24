@@ -1,0 +1,181 @@
+#!/usr/bin/perl
+
+# This script reads a tab-delineated file, and collates the lines by the given column:
+# Where lines are identical apart from the content of the given column, they are collated, separated by a character
+# Content of the given column is sorted, uniqued and separated by a separator (default colon)
+# Optionally, the count of each unique value is added after the value and a semicolon
+# Output lines are sorted by the other columns
+
+use strict;
+use warnings;
+use utf8;
+use open qw/:std :utf8/;
+
+use Getopt::Std;
+
+use Cwd;
+use Cwd qw(abs_path cwd getcwd);
+use File::Basename;
+use Data::Dumper;
+
+sub exitwitherror ($);
+sub doline ($);
+
+########### FILE HEADER
+
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
+
+
+my $comname=basename $0;
+# set a variable for the TAB character
+my $tab="\t";my $nl="\n";
+
+# set variables
+my (%opts, $inputfile, $f, $contents, @lines, $line, $linecount, $collatecol, $inputsep);
+my (%collate, @items, $collate, $restline, %lines, $valuesep, $countsep, @values, $valuenum, $value);
+
+
+########### HELP 
+
+# set the command syntax help text
+my $syntax=qq^
+Collates lines (STDIN or file) by a given column
+
+Syntax of $comname:
+$comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] FILE
+LINES | $comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ]
+
+REQUIRED OPTIONS:
+-c	  The number of the column to collate
+
+OPTIONAL OPTIONS:
+-s	  The input separator of the collated values, default TAB
+-a	  The output separator of the collated values, default colon :
+-n	  Output the count of each collated value, after the value and a separator
+-b	  The output separator between the collated values and their counts, default semicolon ;
+-x	  Ignore lines with too few columns
+
+-?	  Prints this help, does not run the script.
+
+^;
+
+# set the text for more help on this command
+my $morehelp="Use $comname -? for full help on this command
+";
+
+# set command help examples text
+my $commandhelp="
+Examples:
+
+$comname -c 4 FILE 
+";
+# set command argument error message
+my $arg_error =qq£;
+
+Usage
+$comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ] FILE
+LINES | $comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ]
+	 
+Options
+-? : Print this summary
+£;
+
+
+############# GETOPTS
+
+unless (getopts('?c:s:a:nb:x', \%opts)) {print STDERR "$comname: ERROR: invalid option found\n$syntax"; exit 0;}
+if (exists $opts{'?'}) { print STDOUT $syntax; exit -1;}
+
+# option -c is required
+unless (exists $opts{'c'}) { print STDOUT "$comname: ERROR: option -c is required\n"; exit -1; }
+
+$collatecol = $opts{c};
+$inputsep = (exists($opts{s})) ? $opts{s} : $tab;
+$valuesep = (exists($opts{a})) ? $opts{a} : ":";
+$countsep = (exists($opts{b})) ? $opts{b} : ";";
+
+# validate options
+
+# option c should be a positive integer
+unless ($collatecol=~ m%^[1-9]\d*$%) { print STDERR "$comname: ERROR: Option -c must be a positive integer: $collatecol\n"; exit 1;};
+# option b cannot be given unless option a is given
+if (exists($opts{b}) && ! exists($opts{n})) { print STDERR "$comname: ERROR: Option -b cannot be used without option -n\n"; exit 1;};
+
+$linecount=0;
+local $/ = "\n"; # enable line mode for all reads
+# if a parameter is given, use that as the input instead of STDIN
+if (scalar(@ARGV) > 0) {
+	$inputfile=$ARGV[0];
+	unless (-e $inputfile) { exitwitherror("Can't find file $inputfile\n"); };
+	open my $fh, $inputfile or die "Cant open $inputfile: $!";
+	# read a line
+	while ($line = <$fh>) { 
+		$linecount++;
+		doline($line);
+	}
+} else {
+	# parameter not given, so read from STDIN
+	while (<>) {
+		$linecount++;
+		$line=$_;
+		doline($line);
+	}
+}
+
+#print join("\n", sort keys %lines), "\n";
+#print Dumper(\%lines) ;
+
+# loop through sorted hash keys (line of rest of columns)
+for $restline (sort keys %lines) {
+	# get the hash of values of the column to collate for this line
+	%collate = %{$lines{$restline}};
+	# sort the values and join by :, include counts if requested
+	@values = sort keys %collate;
+	$collate="";
+	for ($valuenum=0; $valuenum<=$#values; $valuenum++) {
+		if ($valuenum > 0) { $collate .= "$valuesep" };
+		$collate .= "$values[$valuenum]";
+		if (exists($opts{a})) {
+			$collate .= "$countsep$collate{$values[$valuenum]}"
+		}
+	}
+	# split the line into its columns
+	@items = split("\t", $restline);
+	# Add the collated column into its original place in the list of columns
+	splice @items, $collatecol - 1, 0, $collate;
+	# join the list back into a line
+	$line = join("\t", @items);
+	# output the line
+	print "$line\n";
+}
+
+exit 0;
+
+# function doline - gets value from collate column, create hash of rest of line and value
+sub doline ($) {
+	my $line = shift;
+	# remove trailing EOL characters
+	$line =~ s%[\n\r]+%%g;
+	# split line into columns
+	@items = split(/$inputsep/, $line);
+	if (scalar(@items) < $collatecol) {
+		# ignore this line if requested by option -x
+		return if (exists($opts{x}));
+		print STDERR "$comname: ERROR: line $linecount has too few columns: ", scalar(@items), "\n"; exit 1; 
+	};
+	# extract the column to collate
+	$collate = splice(@items, $collatecol - 1, 1);
+	# join the other columns back into a string
+	$restline = join("$inputsep", @items);
+	#print "$restline\t$collate\n";
+	#print "$restline\n";
+	# add to hash of hashes
+	$lines{$restline}{$collate}++;
+}
+
+sub exitwitherror ($) {
+	my $string = shift;
+	print STDERR "$comname: ERROR: $string\n";
+	exit 0;
+}

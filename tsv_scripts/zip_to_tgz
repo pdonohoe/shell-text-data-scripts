@@ -1,0 +1,56 @@
+#!/bin/bash
+# This script reads a list of zip files as arguments
+# and converts each zip file into a tgz file
+# it will report an error if any tgz file already exists
+# or if the operation fails
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name [ file ] [ ... file ]
+[ file_list ] | xargs -d'\n' $command_name 
+
+Examples: 
+$command_name myfoldername
+find . -type f -name \"*.zip\" | xargs -d'\n' $command_name 
+
+";
+# parenlist () { sed "s%^%'%;s%$%'%" | sed '$!s%$%,%' | tr '\n' ' ' | sed -r 's%^%(%;s% *$%)%'; }
+
+# read command options
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+declare -a file_list;
+case $# in
+	# no files given as parameters to command, use STDIN
+	0) readarray file_list;;
+	*) file_list=( "$@" ) ;;
+esac;
+
+# create temporary directory for base64 files as $temp_fol; exit if error
+"$SCRIPTS_PATH"/maketempdir || exit;
+
+for file in "${file_list[@]}"; do 
+  if [ ! -e "$file" ]; then echo "$file is not a file" 1>&2; continue; fi;
+  if [ "$( echo "$file" | egrep  "\.zip$")" = "" ]; then echo "$file is not a .zip file" 1>&2; continue; fi;
+  tgz_file="${file%.zip}.tgz";
+  if [ -e "$tgz_file" ]; then echo "$tgz_file already exists" 1>&2;  continue; fi;
+  unzip -q "$file" -d "$temp_fol";
+  find "$temp_fol/" -maxdepth 1 -printf "%P\n" | tar -czf "$tgz_file" -C "$temp_fol/" -T -
+  rm -r "${temp_fol:?}"/*
+done

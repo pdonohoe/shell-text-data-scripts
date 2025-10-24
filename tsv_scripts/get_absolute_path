@@ -1,0 +1,109 @@
+#!/bin/sh
+# script name: getabsolutepath
+# Author: Paul Donohoe
+# Description: converts any type of path string into an absolute path
+# Optionally checks the path exists
+
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+current_path=$(pwd);
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+$command_name -v
+
+OPTIONAL OPTIONS:
+-v      check each path exists
+
+Examples: 
+$command_name 
+";
+
+# function to convert a relative path to an absolute path
+# converts Windows-style to Unix-style
+get_abs_path_b74f56bcff6e4498 () {
+  local file;
+  local abs_path;
+  if [ "$1" != "" ]; then
+    file=$1;
+    #echo "$file" 1>&2;
+    # if file is windows-style, convert to unix-style
+    if [ "$( echo "$file" | egrep '\\')" != "" ] ; then file="$(wintounix "$file")" ; fi;
+    # remove leading ./ if present
+    if [ "$( echo "$file" | egrep "^\./")" != "" ]; then abs_path="${current_path}$(printf %s "$file" | cut -c 2-)";
+    # change leading ~ to value of $HOME
+    elif [ "$( echo "$file" | egrep "^~/")" != "" ]; then abs_path="${HOME}/$(printf %s "$file" | cut -c 2-)";
+    # if file starts with /, a letter, then /, it already is absolute
+    elif [ "$( echo "$file" | egrep "^/[A-Za-z]/")" != "" ]; then abs_path="$file";
+    # otherwise, prepend the current path to the given path
+    else abs_path="${current_path}/${file}";
+    fi;
+
+absolute_path="";
+IFS="/";
+for path_folder in $abs_path;
+do
+  if [ -n "$path_folder" ];
+  then
+    if [ "$path_folder" = ".." ];
+    then
+      absolute_path="${absolute_path%/*}";
+    elif [ "$path_folder" != "." ];
+    then
+      absolute_path="$absolute_path/$path_folder";
+    fi;
+  fi;
+done;
+
+
+    # check file exists if requested
+    if [ "$check_paths" = 0 ]; then
+      echo "$absolute_path";
+    else
+      if [ -e "$absolute_path" ]; then
+        echo "$absolute_path";
+      else
+        :
+      fi;
+    fi;
+  fi;
+}
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+check_paths=0;
+
+while getopts "vh?" getopts_option
+do
+  case $getopts_option in
+    v ) check_paths=1;;
+	  h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+
+# test if there are any arguments
+if [ "$#" -ge 0 ]; then
+	# files are given as arguments in the command line
+  for arg in "$@"; do 
+    get_abs_path_b74f56bcff6e4498 "$arg" ;
+	done;
+else
+  # no files given as arguments, read from SDTIN
+  # Input coming from STDIN
+  while read -r arg; do
+    get_abs_path_b74f56bcff6e4498 "$arg" ;
+  done;
+fi;
+
+unset -f get_abs_path_b74f56bcff6e4498

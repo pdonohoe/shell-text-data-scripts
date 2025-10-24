@@ -1,0 +1,98 @@
+#!/bin/sh
+command_name=$(basename "$0");
+help_usage="
+SYNTAX: $command_name [ -l LANGUAGE ] digit [ ... digit ]
+
+For each digit given as a parameter, returns the month abbreviation
+     for that digit in a new line
+Invalid digits are returned with no error
+
+ Options
+    
+  -l LANGUAGE (OPTIONAL) 
+         Returns the month abbreviations in the given language
+     Values accepted: 
+     E e ENG eng - English
+     F f FRE fre - French
+     
+     Default English
+
+";
+opt_language="E";
+while getopts "l:h?" getopts_option
+do
+  case $getopts_option in
+    l ) opt_language="$OPTARG";;
+    h | \? ) echo "$help_usage"; exit 0;;
+  esac
+done
+# Move argument pointer to next.
+shift $((OPTIND - 1));
+
+# validate language option
+case $opt_language in
+e|E|ENG|eng )
+  language="ENG";;
+f|F|FRE|fre )
+  language="FRE";;
+* ) echo "ERROR: $command_name: invalid language, expecting one of:
+e|E|ENG|eng|f|F|FRE|fre" 1>&2;
+exit 1;;
+esac;
+
+case $language in 
+ENG )
+  for digit ; do
+    case "$digit" in 
+      "1" ) echo "Jan";;
+      "2" ) echo "Feb";;
+      "3" ) echo "Mar";;
+      "4" ) echo "Apr";;
+      "5" ) echo "May";;
+      "6" ) echo "June";;
+      "7" ) echo "July";;
+      "8" ) echo "Aug";;
+      "9" ) echo "Sept";;
+      "01" ) echo "Jan";;
+      "02" ) echo "Feb";;
+      "03" ) echo "Mar";;
+      "04" ) echo "Apr";;
+      "05" ) echo "May";;
+      "06" ) echo "June";;
+      "07" ) echo "July";;
+      "08" ) echo "Aug";;
+      "09" ) echo "Sept";;
+      "10" ) echo "Oct";;
+      "11" ) echo "Nov";;
+      "12" ) echo "Dec";;
+      * ) echo "$digit";;
+    esac;
+  done;;
+FRE )
+  for digit ; do
+    case "$digit" in 
+      "1" ) echo "janv";;
+      "2" ) echo "févr";;
+      "3" ) echo "mars";;
+      "4" ) echo "avril";;
+      "5" ) echo "mai";;
+      "6" ) echo "juin";;
+      "7" ) echo "juil";;
+      "8" ) echo "août";;
+      "9" ) echo "sept";;
+      "01" ) echo "janv";;
+      "02" ) echo "févr";;
+      "03" ) echo "mars";;
+      "04" ) echo "avril";;
+      "05" ) echo "mai";;
+      "06" ) echo "juin";;
+      "07" ) echo "juil";;
+      "08" ) echo "août";;
+      "09" ) echo "sept";;
+      "10" ) echo "oct";;
+      "11" ) echo "nov";;
+      "12" ) echo "déc";;
+      * ) echo "$digit";;
+    esac;
+  done;;
+esac;

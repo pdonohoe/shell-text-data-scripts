@@ -1,0 +1,33 @@
+#!/bin/sh
+# This script reads a sequence of lines from STDIN, and 
+# outputs the unique lines, sorted.
+# It prepends the count of each line to a new first column.
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+$command_name returns the unique lines from STDIN, sorted
+It prepends the count of each unique line as a new first column
+
+Syntax of $command_name:
+
+[ LINES ] | $command_name 
+
+";
+
+# read command options
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2

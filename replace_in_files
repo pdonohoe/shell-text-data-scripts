@@ -1,0 +1,694 @@
+#!/usr/bin/perl
+# runs the given perl search and replace expression(s) on
+#   the given list of files. 
+# The search and replace options can be given
+#  on the command-line or in a script file.
+#
+# Either files are backed up to the given folder and then changed in situ,
+#     or changed files are saved to the given folder.  Files unchanged by 
+#     the script are left as they are.
+
+# use -? for details on the script
+
+# *************  SET UP REFERENCED MODULES AND VARIABLES  *************
+use strict;
+use utf8;
+use File::Find;
+use File::Basename;
+use File::Copy;
+use File::Path qw(mkpath rmtree);
+use Getopt::Std;
+use Cwd qw(abs_path cwd);
+use Text::ParseWords;
+
+sub remove_quotes ($) ;
+sub set_help_text () ;
+sub parse_rif_file ($) ;
+sub HELP_MESSAGE ($$$$) ;
+sub VERSION_MESSAGE ($$$$) ;
+
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
+
+# switch to ensure the script terminates after options --help or --version are given
+$Getopt::Std::STANDARD_HELP_VERSION = -1;
+
+# Define global variables
+my (%opts, $search, $replace, $command_name, $cwd, $opt, @opts_list, %list_opts, %this_opts, $processing_file, $in_process);
+our ($help_usage, $help_all, $help_version, $help_description, $help_options, $help_examples, $help_file, $help_regex, $help_reporting);
+my (%file_ids, @files_to_process, $output_fol, $local, $test_mode, $this_file, $output_file);
+my ($report_mode, $all_files_replacement_count , $all_files_recursive_replacement_count, $replaced_file_count);
+
+$cwd = cwd();
+$command_name = basename $0;
+our $VERSION="1.0";
+set_help_text();
+
+# get the command-line options accepted by this script
+unless (getopts('f:s:r:d:w:l?aitbmoqv', \%opts)) { print STDERR "invalid option found\n"; exit 1;}
+
+# set the help text (function at bottom of script)
+my @helptypes;
+my @helpwords;
+# print help info and exit if -? option given
+if (exists $opts{'?'}) { 
+	# get the argument following -? if any
+	for my $arg (@ARGV) { 
+		# stop if an option (beginning with -) is reached
+		$arg =~ m%^-% and last;
+		$arg =~ /^[douefrm]+$/ and push(@helptypes, split(//, $arg)) and next;
+		push (@helptypes, $arg);
+	}
+	if ($#helptypes > -1) {
+		# replace consecutive single-letter options with spaced values
+		# output only part of the help text specified by the argument
+		for (@helptypes) {
+			/^(d|desc|description)$/ and do {print STDOUT $help_description; next;};
+			/^(o|opt|opts|options)$/ and do {print STDOUT $help_options; next;};
+			/^(u|usage)$/ and do {print STDOUT $help_usage; next;};
+			/^(e|examples)$/ and do {print STDOUT $help_examples; next;};
+			/^(f|file)$/ and do {print STDOUT $help_file; next;};
+			/^(r|regex)$/ and do {print STDOUT $help_regex; next;};
+			/^(m|mode)$/ and do {print STDOUT $help_reporting; next;};
+			print STDOUT "$_\n";
+		}
+	} else {
+		# if no argument, or it is not recognised, output the full help text
+		print STDOUT $help_all;
+	}
+	exit 0;
+}
+
+# set default report mode to standard
+$report_mode = "standard";
+
+# exit with error if option d not supplied
+unless (exists $opts{d} and $opts{d} ne "") { print STDERR "option -d (output folder) must be specified\n$help_options"; exit 1; }
+# exit with error if neither options b or o are given
+unless (exists($opts{b}) or exists($opts{o})) { print STDERR "Either option -o (output changed files to folder) or option -b (backup original files to folder) must be specified\n$help_options"; exit 1; }
+# exit with error if both options b and o are given
+if (exists($opts{b}) and exists($opts{o})) { print STDERR "Options -o (output changed files to folder) and -b (backup original files to folder) are mutually exclusive\n$help_options"; exit 1; }
+
+my $vqm = 0;
+if (exists($opts{v})) {$vqm++; $report_mode = "verbose"; }
+if (exists($opts{q})) {$vqm++; $report_mode = "quiet"; }
+if (exists($opts{m})) {$vqm++; $report_mode = "minimal"; }
+
+# options v, q and m are mutually exclusive
+if ($vqm > 1) { 
+    print STDERR "Report options -v (verbose), -m (minimal) and -q (quiet) are mutually exclusive\n$help_options"; exit 1; 
+}
+
+
+# Get absolute path for output folder
+# remove trailing / from output_fol if it exists
+$opts{d} = ( substr($opts{d}, -1, 1) eq "/" ) ? substr($opts{d}, 0, -1) : $opts{d};
+# find rightmost occurrence of "../" in -d option
+my $output_fol_parent = rindex($opts{d}, "../");
+if ($output_fol_parent == -1) {
+	# if ../ does not exist in -d option, then set output folder to current folder plus -d option
+	$output_fol = "$cwd/$opts{d}";
+} else {
+	# ../ does exist, set the base folder path $bf to the -d option up to the last ../
+	my $bf = substr($opts{d}, 0, $output_fol_parent + 2);
+	# get the absolute path for $bf
+	$output_fol = abs_path($bf);
+	# set the output folder to this absolute path, plus the remainder of -d option
+	$output_fol .= substr($opts{d}, $output_fol_parent + 2);
+}
+
+print STDOUT "output folder:$output_fol:\n" if ($report_mode eq "verbose");
+print STDOUT "output folder is absolute\n" if (exists($opts{o}) && $report_mode eq "verbose");
+
+unless ($#ARGV > -1 ) { print STDERR "at least one file is required\n"; exit 1;}
+foreach $this_file (@ARGV) { push @files_to_process, $this_file; }
+
+# set up the replace list
+@opts_list = ();
+
+# now validate each line of the script file
+unless (exists $opts{f}) {
+	# no script file, use the existing options once
+	push @opts_list, \%opts;
+} else {
+	parse_rif_file($opts{f});
+}
+
+
+# validate command-line option combinations
+for (my $sr_num = 0; $sr_num <= $#opts_list; $sr_num++) {
+	# get the current hash from the array
+	my %this_opts = %{$opts_list[$sr_num]};
+	# if verbose mode, list found regexes
+	if ($report_mode eq "verbose") { map { print STDOUT "$_ $this_opts{$_}\n"; } sort keys %this_opts };
+	# if the regex came from a file, create the line number error message snippet
+	my $line_error = (exists($this_opts{line})) ? " on line $this_opts{line} of $opts{f} " : "";
+	# validate the options in the options list
+	unless (exists $this_opts{s}) { print STDERR "ERROR: missing search option$line_error\n" , $help_usage; exit 1};
+	unless (exists $this_opts{r}) { print STDERR "ERROR: missing replace option$line_error\n" , $help_usage; exit 1};
+	# remove any enclosing pairs of "" or '' round options d, r and s
+	if (exists $opts{d} && $opts{d} =~ m/[<\$>;=@^!%,'[\]{}()|]/) { print STDERR 'option -d ($opts{d}) must not contain any of these characters: |<>$@{}();=^!%,\'[]*?', $line_error, "\n"; exit 1;}
+	# now validate the regexes
+	# r regex must not contain un-escaped double quotes
+	if ($this_opts{r} =~ m|[^\\]"|) { print STDERR 'option -r (replace regex) must not contain un-escaped double quotes', $line_error, "\n"; exit 1;}
+	# validate the s and r regexes
+	if (exists $this_opts{s}) {
+		# within this if section, turn warnings into fatal errors
+		local $SIG{__WARN__} = sub { die $_[0] };
+		# evaluate the match expression
+		eval { $opt =~ m!$this_opts{s}!; };
+		# if there's an error, print custom error text plus error message, then exit script
+		if ($@) { print STDERR "error in match regex$line_error\n", $@; exit 1;	}
+		# evaluate the replace expression
+		eval { $opt =~ s!$this_opts{s}!$this_opts{r}!; };
+		# if there's an error, print custom error text plus error message, then exit script
+		if ($@) { print STDERR "error in replace regex$line_error\n", $@; exit 1;	}
+	}
+
+	# validate the w regex
+	if (exists $this_opts{w}) {
+		local $SIG{__WARN__} = sub { die $_[0] };
+		eval { "aaa" =~ m!$this_opts{w}!; };
+		die $@ if $@;
+	}
+
+}
+
+# set all files counters
+$all_files_replacement_count = 0;
+$replaced_file_count = 0;
+
+FILELOOP: foreach $this_file (@files_to_process) {
+	# test the item exists, is a file, and can be read from
+	unless (-e $this_file) { print STDERR "Can't find source file $this_file\n"; next; }
+	unless (-f $this_file) { print STDERR "$this_file is not a file\n"; next; }
+	unless (-r $this_file) { print STDERR "Can't read from file $this_file\n"; next; }
+	# get path for backup file, depends on option -o
+	$output_file = abs_path($this_file);
+	if (exists $opts{o}) {
+		# if option -a specified, the 
+		$output_file =  "$output_fol/$this_file";
+	} else {
+		$output_file =~  s/$cwd/$output_fol/;
+	}
+	$output_file =~ s%//%/%g;
+	# read content from source file
+	undef $/;
+	unless (open (FLE, '<:utf8', "$this_file")) { print STDERR "Can't open $this_file!\n"; next; };
+	my $this_file_content = <FLE>;
+	close FLE;
+	# reset count of replacements and list of regex items matched
+	my $this_file_replacement_count = 0; 
+	my $this_file_regex_items_list = "";
+	my $replace_file_content = $this_file_content;
+	# RUN THROUGH LIST OF REPLACE OPTIONS
+	REPLACELOOP: for (my $sr_num = 0; $sr_num <= $#opts_list; $sr_num++) {
+		my (%this_opts, $this_regex_replacement_count);
+		# retrieve the options list from the @opts_list array
+		%this_opts = %{$opts_list[$sr_num]};
+		# enclose replace regex in double quotes, to enable double-evaluation by ee option, 
+		#    to enable interpolation of backreferences
+		my $replace = '"' . $this_opts{r} . '"';
+		unless (exists $this_opts{w}) {
+			# option w not specified, use the whole file for search and replace
+			# if option a is given, repeat replace until no replacements made
+			unless (exists($this_opts{a})) {
+				# option a not given, a single replace needed
+				# is option i given?
+				if (exists($this_opts{i})) {
+					$this_regex_replacement_count = $replace_file_content =~ s!$this_opts{s}!$replace!gisee ;
+				} else {
+					$this_regex_replacement_count = $replace_file_content =~ s!$this_opts{s}!$replace!gsee ;
+				}
+				if ($replace_file_content eq "" ) {
+					print STDERR "replace failed for $this_file\n";
+					next FILELOOP;
+				}
+			} else {
+				# option a given, need recursive replace
+				$this_regex_replacement_count = 0;
+				my $this_regex_replacement_recursive_count = 0;
+				my $iteration = 0;
+				# begin infinite loop
+				while (1) {
+					# increment iteration
+					$iteration++;
+					# try the replace
+					if (exists($this_opts{i})) {
+						$this_regex_replacement_recursive_count = $replace_file_content =~ s!$this_opts{s}!$replace!gisee ;
+					} else {
+						$this_regex_replacement_recursive_count = $replace_file_content =~ s!$this_opts{s}!$replace!gsee ;
+					}
+					if ($replace_file_content eq "" ) {
+						print STDERR "replace failed for $this_file\n";
+						next FILELOOP;
+					}
+					# exit loop if no match found
+					last unless ($this_regex_replacement_recursive_count);
+					# add number of replaces for this iteration to total count for this regex
+					$this_regex_replacement_count += $this_regex_replacement_recursive_count;
+					# as a precaution against infinite recursion, stop this loop when iterations
+					#   exceeds 100
+					if ($iteration > 100) {
+						print STDERR "ERROR: iteration of regex #" . ($sr_num + 1) . " exceeded 100. Terminating this regex.\n";
+						last;
+					}
+
+				}
+
+			}
+			
+		} else {
+			# option w is specified, run through each matching section
+			# to be written !!
+			
+		}
+
+		# NEW: if replacement regex contains "INSERT_FILE:", check INSERT_FILE hash
+		if ($replace =~ m%INSERT_FILE:[^!]+%) {
+			# loop through each key in the INSERTION_FILE hash
+			for my $file_key (sort keys %file_ids) {
+				# check the key has been referenced in this replacement regex
+				if (index($replace, $file_key) != -1) {
+					my $pos;
+					while ( ($pos = index($replace_file_content, $file_key, $pos)) != -1) {
+						$replace_file_content = substr($replace_file_content, 0, $pos)
+							. $file_ids{$file_key} . substr($replace_file_content, $pos + length($file_key));
+						$pos = $pos + length($file_ids{$file_key}) + 1;
+					}
+				}
+			}
+		}
+		# increment number of replacements
+		$this_file_replacement_count += $this_regex_replacement_count;
+		
+		if ($this_regex_replacement_count) { 
+			# add item number (one-based) and line number of regex to list of successful regexes
+			$this_file_regex_items_list = $this_file_regex_items_list . " #" . ($sr_num + 1) . ":$this_opts{line}:$this_regex_replacement_count" ;
+			# increment grand total of regex replacements
+			$all_files_replacement_count += $this_regex_replacement_count;
+		};
+	}
+	# test whether regex replace(s) changed the file content
+	if ($replace_file_content ne $this_file_content) {
+		# increment total changed files count
+		$replaced_file_count++;
+		# file content changed
+		# ensure the path to the output file exists
+		mkpath(dirname($output_file));
+		# check -b or -o option specified
+		if (exists ($opts{o})) {
+			# -o specified, leave original file alone, save changed content to output file
+			unless (open (FLE, '>:utf8', "$output_file")) {
+				# of output file can't be opened for writing, print error and skip to next file
+				print STDERR "ERROR: Can't open $output_file for writing\n";
+				next;
+			}
+		}
+		if (exists ($opts{b})) {
+			# -b specified, copy original file to output file, save changed content over original file
+			# copy original to backup file or next file
+			unless (copy ($this_file, $output_file)) {
+				# if original file cannot be copied to output file, print error and skip to next file
+				print STDERR "ERROR: could not copy $this_file to $output_file:\t$!\n";
+				# skip this file if it cannot be copied
+				next;
+			} 
+			# test original file is writeable or removable
+			unless ( -x $this_file || (unlink ($this_file) == 1)) { 
+				# if original file cannot be removed or written to, print error and skip to next file
+				print STDERR "ERROR: could not write or delete $this_file:\t$!\n";
+				next;
+			}
+			# write changed content to original file
+			unless (open (FLE, '>:utf8', "$this_file")) {
+				# if original file can't be opened for writing, print error and skip to next file
+				print STDERR "ERROR: Can't open $this_file for writing\n";
+				next;
+			}
+		}
+		# overwrite original file with changed content
+		print FLE $replace_file_content;
+		close FLE;
+	}
+	# Report on each file unless -q or -m chosen
+	# test whether regex replace(s) changed the file content
+	if ($report_mode eq "verbose" || $report_mode eq "standard") {
+		if ($replace_file_content ne $this_file_content) {
+			# print to STDOUT the filename and the number of replacements to it
+			print STDOUT "$this_file $this_file_replacement_count regex replacements:$this_file_regex_items_list\n" ;
+			#$this_file_replacement_count
+		} else {
+			# Regex did not change file
+			print STDOUT "$this_file not changed\n" ;
+		}
+	}
+# next file
+}
+
+# output summary report if option -m is selected
+if ($report_mode eq "minimal") {
+	print STDOUT scalar(@files_to_process), " files scanned; $replaced_file_count files changed;  $all_files_replacement_count regexes executed\n" ;
+}
+
+exit 0;
+
+sub remove_quotes ($) {
+	my $string = shift;
+	if (substr($string,0,1) eq "'") { 
+		if (substr($string,-1,1) eq "'") { $string = substr($string,1,length($string)-2); }
+	} elsif  (substr($string,0,1) eq '"') {
+		if (substr($string,-1,1) eq '"') { $string = substr($string,1,length($string)-2); }
+	}
+}
+
+sub set_help_text () {
+my $self_space = " " x length($command_name);
+$help_usage = qq^
+Usage: 
+$command_name -? 
+$command_name [ -t ] ( -o | -b ) -d output-folder 
+$self_space     ( -f script-file | [ -a ] -s search-regex -r replace-regex )
+$self_space     file-to-edit [ ... file-to-edit ]
+^;
+
+$help_version = qq^
+$command_name version $VERSION, 2025
+^;
+
+$help_description = qq^
+$command_name runs the given perl search and replace expression(s) on
+the given list of files. 
+The search and replace options can be given
+on the command-line or in a script file.
+
+Either files are backed up to the given folder and then changed in situ,
+     or changed files are saved to the given folder.  Files unchanged by 
+     the script are left as they are.^;
+
+$help_options = qq^
+REQUIRED OPTIONS: 
+  -d output-folder  - this must be a valid folder path
+
+EITHER:
+  -o                - output changed files to given folder
+OR:
+  -b                - backup original files to given folder
+
+EITHER: 
+  -s search-regex   - this must be a valid Perl match regular expression. 
+  -r replace-regex  - this must be a valid Perl replace expression. All
+                       double quotes must be escaped eg \\"bar\\". 
+
+  -a  (OPTIONAL)    - the Regex replace is executed repeatedly until no 
+                       further changes are made. Note that this is limited 
+                       to 100 iterations to avoid infinite loops. 
+  -i  (OPTIONAL)    - the Regex search is case-insensitive 
+
+OR: 
+  -f script-file     - script-file must be a path to a valid replace_in_files script file.
+                      Blank lines or those beginning with # will be ignored 
+					  Lines beginning with "INSERTION_FILE:" define files which contents can 
+					    be inserted in replace expressions
+					  Lines begining with "RIF_FILE:" define the inclusion of separate
+					    replace_in_script script files
+                      Every other line of the script file must include the
+                        -r and -s options, and may include the -a or -i options
+                      Replaces are run sequentially on each file. 
+
+OPTIONAL OPTIONS: 
+  -t                - Test Mode.  The script runs normally, but does not  
+                        change any files
+
+By default, paths to files changed, with number of replacements, are printed to STDOUT
+
+  -v                - Verbose Mode. Output folders, and full list of regexes, are also output to STDOUT
+  -q                - Quiet Mode. No report output to STDOUT
+  -m                - Minimal Mode. Only the grand total counts are output to STDOUT
+  
+  -?                - Prints this help, does not run the script. 
+  -?  [ option ]    - Prints a help section, does not run the script. 
+      d or desc or description - the Description section
+      o or opts or options - the Options section
+      u or usage - the Usage section
+      e or examples - the Examples section
+      f or file - the Regex section
+      m or mode - the Reporting Mode section
+  ^;
+
+
+$help_regex = q@
+Regular Expressions
+The -s option must contain a valid Perl regex search expression
+The -r option must contain a valid Perl regex replace expression:
+* double quotes must be escaped: \"
+* backreferences to search expression capture groups can be used: $1 or ${3}
+* defined INSERT_FILE: references can be used
+
+The -a option will recursively run the same replacement, up to 100 times
+@;
+
+$help_examples = qq^
+EXAMPLES:
+$command_name -o -d changed-files -s '"caff(?=.*</aug>)' -r '\\"caf' 
+                                2540100a.xml ejis20085a.xml jibs201059a.xml
+    ( Replaces "caff that occurs before </aug> with "caf in the given files.  
+    	Original files are left in situ, changed files are put in the 
+    	"changed-files" folder, maintaining relative file paths.)
+
+xargs $command_name -b -d backup-files 
+           -s '(day="[0-9][0-9])\\s+"' -r '\$\{1\}\\"'  < file-list.txt
+    ( Removes trailing spaces within the \@day attribute value, note the 
+    	double quote in the replace expresssion is escaped. Files are 
+    	changed in-situ, first backed up to folder backup-files)
+
+
+find . -type f -name "*.xml"| xargs $command_name -o -d changed-files 
+           -f regex-script-file
+    ( Finds all XML files from the current folder and applies all the
+    	regex replaces in file regex-script-file to them. Original files are
+    	left in situ, changed files are put in the "changed-files" folder, 
+    	maintaining relative file paths.)
+^;
+
+$help_file=q@
+script-file must contain a sequence of lines, which are interpreted as follows:
+* leading and trailing whitespace is deleted
+* empty lines are ignored
+* lines beginning with # are ignored
+* lines beginning with INSERTION_FILE: are treated as references to external files:
+   * the line must match regex ^INSERTION_FILE:[^!]+\s*!\s*[^!]+\s*$
+   * the line is split into two parts separated by ! :
+      an identifier beginning with INSERTION_FILE: and a file path; 
+	  leading and trailing spaces are removed
+   * the identifier must match regex ^INSERTION_FILE:[A-Za-z0-9-]+$
+   * the file path must point to an existing file
+* all other lines must include the -r and -s options, may include the -a option
+
+If INSERTION_FILE: references are defined, then for each occurrence of a INSERT_FILE: reference 
+  in a *following* replacement regex, after the replacement, each occurrence 
+  of the INSERT_FILE: reference in the output text will be replaced by the content 
+  of the referenced file.  As there is no defined order for this, avoid 
+  including more than one INSERT_FILE: reference in any one replacement line.
+
+Example:
+-s 'regex-search-one' -r 'fooINSERT_FILE:my-file-identifierbar'
+INSERTION_FILE:my-file-identifier ! ../my-file.txt
+-s 'regex-search-two' -r 'fooINSERT_FILE:my-file-identifierbar'
+
+All occurrences of "regex-search-one" in the source files will be replaced by:
+"fooINSERT_FILE:my-file-identifierbar"
+All occurrences of "regex-search-two" in the source files will be replaced by:
+"foo", followed by the content of file ../my-file.txt, followed by "bar"
+@;
+
+$help_reporting=q@
+REPORTING
+
+There are 4 reporting variations, selected by options -q, -m, -v and 
+omission of these options.
+
+Option -q "quiet" suppresses reporting.
+
+Option -m "minimal" reports only the grand total of replacements:
+NUMBER files scanned; NUMBER files changed; NUMBER regexes executed
+
+Omission of options -q, -m and -v reports in "standard" mode: 
+for each file changed:
+filename NUMBER regex replacements: REPLACELIST
+Where REPLACELIST is a space-separated list of the count of replacements for each regex in the script-file:
+#REGEXNUMBER:REGEXLINENUMBER:NUMBEROFREPLACEMENTS
+
+For example:
+file1.txt 100 #1:5:45 #2:7:25 #3:9:30
+file4.txt 10 #2:7:5 #4:11:5
+
+Option -v "verbose" outputs the location of the output folder, followed by the 
+list of regexes in the script-file, with each part of each regex on a separate 
+line, followed by the "standard" report.
+
+For example:
+output folder:/c/Users/donohpa/work/projects/efx-editor/new-way/fixed:
+output folder is absolute
+line 4
+r \n
+s [\r\n]+
+line 7
+r \n
+s \s+\n
+a
+line 10
+r $1$2$3
+s (<line[^>]*[^/]>\s*(?:<(?:[^l/]|/[^l])[^>]*>))*\s*\n\s*((?:<(?:[^l/]|/[^l])[^>]*>)*\s*\n)*(</line>)
+render-template.xml 1685 regex replacements: #1:4:1610 #3:10:75
+@;
+
+$help_all=qq^
+$help_version
+
+$help_description
+
+$help_usage
+
+$help_options
+
+$help_regex
+
+$help_examples
+
+$help_file
+
+$help_reporting
+^;
+
+my $future_help = qq^
+  -y                - The output-folder is treated as absolute; that is, the  
+                        common path between it and each file is added to the  
+                        output file path. 
+
+^;
+
+}
+
+
+
+sub parse_rif_file ($) {
+	my $rif_file = shift;
+	my $rif_file_fh;
+	unless (-e $rif_file) { print STDERR "cannot find script file $rif_file\n"; exit 1;};
+	# script file exists, open it and read it by line
+	unless (open ($rif_file_fh, '<:utf8', "$rif_file")) { print STDERR "ERROR: Can't open script file $rif_file!\n"; exit 1; }; 
+	my $line_count = 0;
+	while (my $line = <$rif_file_fh>) {
+		# increment line count
+		$line_count++;
+		# remove LF, CR, leading and trailing spaces from current line
+		$line = $line =~ s%[\r\n]+%%gr =~ s%^\s+%%r =~ s%\s+$%%r;
+		# skip line if it is empty
+		next if ($line eq "");
+		# skip line if it begins with a hash
+		next if ($line =~ m|^#|);
+		# if the line begins with INSERTION_FILE:, add the contents of the file to the file hash
+		if ($line =~ m|^\s*INSERTION_FILE:|) {
+			# check the line has a replace ID and path separated by !
+			unless ($line =~ m|^INSERTION_FILE:[^!]+![^!]+$|) {
+				print STDERR "ERROR: bad INSERTION_FILE declaration: $rif_file\n $line\n" , $help_usage; exit 1;
+			}
+			# split the line into replace ID and file path
+			my ($dec_id, $path) = split(/!/, $line);
+			# remove leading and trailing spaces from replace ID and file path
+			$dec_id = $dec_id =~ s%^\s+%%r =~ s%\s+$%%r;
+			$path = $path =~ s%^\s+%%r =~ s%\s+$%%r;
+			# validate the replace ID - it must contain only letters, numbers, - and :
+			unless ($dec_id =~ m|^INSERTION_FILE:[A-Za-z0-9-]+$|) {
+				print STDERR "ERROR: bad INSERTION_FILE identifier: $rif_file\n $dec_id\n" , $help_usage; exit 1;
+			}
+			# check the file path exists
+			# if the file path begins with : then make it relative to the rif file
+			if ($path =~ m/^:/) {
+				# remove the :
+				$path = substr($path, 1);
+				# copy the rif filepath
+				my $rif_path = $opts{f};
+				# remove the rif filename to get the folder path
+				$rif_path =~ s%/[^/]*$%%;
+				# prepend the folder path to the INSERTION_FILE path
+				$path = "${rif_path}/$path";
+			}
+			unless (-e "$path") {
+				print STDERR "ERROR: cant find INSERTION_FILE: $path\n" , $help_usage; exit 1;
+			}
+			$path = abs_path($path);
+			# create a new filehandle variable
+			my $include_file;
+			# get the file's contents 
+			my $this_file_content = do { 
+				local $/; 
+				unless (open ($include_file, '<:utf8', "$path")) { print STDERR "ERROR: Can't open $path!\n"; exit 1; }; 
+				<$include_file>; 
+			};
+			close $include_file;
+			# add the file's ID and content to the INSERTION_FILE hash
+			$file_ids{$dec_id}=$this_file_content;
+		} elsif ($line =~ m|^\s*RIF_FILE:|) {
+			# check the line has text after RIF_FILE:
+			unless ($line =~ m|^RIF_FILE:\s*\S+\s*$|) {
+				print STDERR "ERROR: bad RIF_FILE declaration: $rif_file\n $line\n" , $help_usage; exit 1;
+			}
+			# split the line into replace ID and file path
+			(my $inc_rif_file_path) = $line =~ m|^\s*RIF_FILE:\s*(\S+)\s*$|;
+			# if the file path begins with : then make it relative to the rif file
+			if ($inc_rif_file_path =~ m/^:/) {
+				# remove the :
+				$inc_rif_file_path = substr($inc_rif_file_path, 1);
+				# copy the rif filepath
+				my $current_rif_path = $rif_file;
+				# remove the rif filename to get the folder path
+				$current_rif_path =~ s%/[^/]*$%%;
+				# prepend the folder path to the RIF_FILE path
+				$inc_rif_file_path = "${current_rif_path}/$inc_rif_file_path";
+			}
+			# check the file path exists
+			unless (-e "$inc_rif_file_path") {
+				print STDERR "ERROR: $cwd cant find RIF_FILE: $inc_rif_file_path\n" , $help_usage; exit 1;
+			}
+			$inc_rif_file_path = abs_path($inc_rif_file_path);
+			# print STDERR "$inc_rif_file_path\n";
+			# recurse into this RIF file
+			parse_rif_file($inc_rif_file_path);
+
+
+		} else {
+			# for each line, reset the options list to that given in the command line
+			my %this_opts;
+			# reset this line's options hash
+			%list_opts=();
+			# put the line into the arguments variable @ARGV
+			@ARGV = quotewords('\s+', 1, $line);
+			# get this line's options into the line's options hash or exit
+			unless (getopts('as:r:w:it', \%list_opts)) {print STDERR "invalid option found in script file $opts{f}, line $.: @ARGV\n"; close SCRIPT; exit 1;}
+			# copy this line's options to the options list, overwriting any existing
+			foreach my $opt (keys %list_opts) { $this_opts{$opt} = remove_quotes($list_opts{$opt}); }
+			# add the line number to the options hash
+			$this_opts{line} = $line_count;
+			# add the options to the replace list
+			push @opts_list, \%this_opts;
+		}
+	}
+	close $rif_file_fh;
+}
+
+# subroutine called automatically when option --help is given
+sub HELP_MESSAGE ($$$$) {
+	# ignore arguments from getopts
+	shift; shift; shift; shift;
+	# print help
+	print STDOUT $help_all;
+ } ;
+
+sub VERSION_MESSAGE ($$$$) {
+	# ignore arguments from getopts
+	shift; shift; shift; shift;
+	# print help
+	print STDOUT $help_version;
+ } ;

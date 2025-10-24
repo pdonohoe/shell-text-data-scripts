@@ -1,0 +1,91 @@
+#!/bin/sh
+# This script reads a sequence of lines, and converts to a one-line list
+# Each item (line) is quoted; a string separates each item; the list is
+# preceded and ended by strings
+# each of these can be specified; defaults are:
+# quote string: ' (single quote)
+# item separator: ", " (comma-space)
+# start and end strings: ( ) (parentheses)
+# They must not use all the following characters: %/!#:;
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+[ LINES ] | $command_name [ -n ] [ -q CHARACTER ] [ -d DELIM string ] [ -s CHARACTER ] [ -e CHARACTER ]
+
+OPTIONAL OPTIONS:
+-n      skip empty items
+-q      string used as quote, default \"'\" (single quote))
+-d      string used as delimiter/separator, default \", \" (comma-space))
+-s      string used as starting enclosure, default \"(\" (open parenthesis)
+-e      string used as ending enclosure, default \")\" (close parenthesis)
+
+Examples: 
+$command_name < FILE
+(seq 25 35; seq 38 40) | $command_name -q '\"' 
+[ search term list ]  | $command_name -q '' -d '|' 
+
+";
+
+# set default values
+quote="'";
+separator=", ";
+enc_start="(";
+enc_end=")";
+skip_empty_lines=0;
+
+# read command options
+while getopts "nq:d:s:e:h?" getopts_option
+do
+  case $getopts_option in
+    n ) skip_empty_lines=1;;	
+    q ) quote="$OPTARG";;	
+    d ) separator="$OPTARG";;	
+    s ) enc_start="$OPTARG";;	
+    e ) enc_end="$OPTARG";;	
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# find a character to use as the sed subsitution delimiter
+
+# get a list of all characters used by the script options - these cant be used
+used_chars="${quote}${separator}${enc_start}${enc_end}";
+# specify the list of characters that may be used as the sed subsitution delimiter
+sed_delimiters='%/!#:;';
+# remove the list of script option characters from the possible sed subsitution delimiter characters
+allowed_delimiters=$(echo "$sed_delimiters" | tr -d "$used_chars");
+# choose the first character remaining as the character to use as the sed subsitution delimiter
+s_d=$(printf %.1s "$allowed_delimiters");
+
+if [ "$s_d" = "" ]; then echo "you have used all possible sed delimiters $sed_delimiters , $command_name cannot run" 1>&2; exit 1; fi;
+
+# construct the sed command for the conversion
+
+# sed to a) add quote to start of each line; b) add quote to end of each line; c) add separator to end of each line except the last line
+sed1="s${s_d}^${s_d}${quote}${s_d};s${s_d}"'$'"${s_d}${quote}${s_d};"'$'"!s${s_d}"'$'"${s_d}${separator}${s_d};"
+# sed to a) add start enclosure to start of first line; b) add end enclosure to end of last line;
+sed2="1s${s_d}^${s_d}${enc_start}${s_d};"'$'"s${s_d}"'$'"${s_d}${enc_end}${s_d};";
+# sed to group all lines together
+sed3='$!{H;d};${H;x;s%[\n\r]+%%g}';
+
+# full sed substitution command
+sed_command="${sed1}${sed2}${sed3}";
+
+# sed to remove empty lines
+if [ "$skip_empty_lines" -eq 1 ]; then 
+sed -r '/^\s*$/d' | sed -r "$sed_command" ;
+else
+sed -r "$sed_command" ;
+fi;
+

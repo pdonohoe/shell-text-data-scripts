@@ -1,0 +1,107 @@
+#!/bin/sh
+
+# samplefile returns a small number of sample lines from input.
+# samplefile reads either lines from STDIN, or from a file given as an argument.  
+# It outputs N lines from the source, evenly spaced *. N is either given as an argument,
+# or defaults to 10.
+
+# * If the number of lines from input is greater than the number of lines required, the first line is avoided.
+# * If the number of lines from input is greater than twice the number of lines required, the last line is avoided.
+
+# Uses environment variable $TMPDIR , if this is not set to a valid folder, this script exits with an error
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+[ "$TMPDIR" == "" ] && echo "$command_name: ERROR: environment variable \$TMPDIR is not set" 1>&2 && exit 1;
+[ ! -d "$TMPDIR" ] && echo "$command_name: ERROR: environment variable \$TMPDIR is not set to a valid foder" 1>&2 && exit 1;
+
+help_usage="
+$command_name outputs the given number of lines (default 10) fromt
+the source file, distributed evenly.
+
+Note that for input from STDIN, the execution time can be long for large numbers of input lines.
+It may be better to save STDIN as a file and use that as input
+
+Syntax: 
+$command_name [ -n number ] file
+[ lines ] | $command_name [ -n number ]
+
+Options
+-? : Print this summary
+-n : Set the number of lines to return (default 10)
+";
+
+number_lines_required=10;
+
+# read command options
+while getopts "n:h?" getopts_option
+do
+  case $getopts_option in
+    n ) number_lines_required="$OPTARG";;	
+	h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+# validate options
+
+input_file=$1;
+
+# Validate options
+if [ "$( echo "$number_lines_required" | egrep  "^[1-9][0-9]*$")" = "" ]; then 
+    echo "ERROR: $command_name: -n option must be a positive integer :$number_lines_required:;$help_usage" 1>&2; 
+    exit 1 ; 
+fi;
+
+if [ "$#" -gt 1 ]; then 
+    echo "ERROR! $command_name requires zero or one argument.;$help_usage" 1>&2; 
+    exit 1 ; 
+fi;
+if [ "$#" -eq 1 ]; then 
+	# sampled file must exist
+	if [ ! -e "$input_file" ]; then
+		echo "ERROR: $command_name: Can't find file $input_file" 1>&2; 
+		exit 1 ;
+	fi;
+	sample_file=$input_file;
+else
+	sample_file=$(mktemp -t tmp.XXXXXXXXXX) || echo "$command_name: ERROR: \"mktemp\" command failed." 1>&2 ;
+	while IFS= read -r line; do
+ 		printf '%s\n' "$line";
+	done > $sample_file
+fi;
+# get count of lines
+count_lines=$(wc -l < "$sample_file");
+
+# if number of lines required is more than the number of lines in the input, just output all lines
+if [ $number_lines_required -ge $count_lines ]; then cat "$sample_file"; exit 0; fi;
+
+# decision to avoid output of first line as it is sometimes not representative
+# decision to avoid output of last line as it is sometimes not representative, if 
+#   the number of lines required is less than half the number of input lines
+
+if [ $(( $number_lines_required * 2 )) -ge $count_lines ]; then
+
+awk -v c="$count_lines" -v n="$number_lines_required" 'BEGIN { num=1; } { 
+	divnum = int(NR * n / c); 
+	if ((divnum == num) && (num <= n)) {
+		print;
+		num++;
+	};
+};	' "$sample_file";
+
+else 
+
+awk -v c="$count_lines" -v n="$(( number_lines_required + 1))" 'BEGIN { num=1; } { 
+	divnum = int(NR * n / c); 
+	if ((divnum == num) && (num < n)) {
+		print;
+		num++;
+	};
+};	' "$sample_file";
+
+fi;

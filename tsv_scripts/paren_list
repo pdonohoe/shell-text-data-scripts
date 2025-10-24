@@ -1,0 +1,41 @@
+#!/bin/sh
+# This script reads a sequence of lines, and converts to a parenthesised, comma-separated, quoted list
+# The quote character can be specified (default ")
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+[ LINES ] $command_name -q CHARACTER
+
+OPTIONAL OPTIONS:
+-q      character used as quote (\" is used as a default)
+
+Examples: 
+$command_name < FILE
+(seq 25 35; seq 38 40) | $command_name -q \"'\"
+
+";
+
+quote='"';
+
+# read command options
+while getopts "q:h?" getopts_option
+do
+  case $getopts_option in
+    q ) quote="$OPTARG";;	
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+sed "s%^%${quote}%;s%$%${quote}%" | sed '$!s%$%,%' | tr '\n' ' ' | sed -r 's%^%(%;s% *$%)%' ;
+

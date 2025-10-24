@@ -1,0 +1,74 @@
+#!/bin/sh
+# This script prettifies a given XML file.
+# Requirements: Java, Saxon HE Java implementation of XQuery (minimum version saxon9he.jar and xml-resolver-1.2.jar)
+
+# Global variables required: JAVA_OPTIONS, XQUERY_CLASS_PATH, XQUERY_CLASS, XPRETTY_OPTIONS
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name -s xml_file [ -o outputfile ]
+
+REQUIRED OPTIONS:
+-s      path to source XML file
+
+OPTIONAL OPTIONS:
+-o      path to output XML file
+
+
+Examples: 
+$command_name -?
+$command_name -s mds201199a.xml -o mds201199a-pretty.xml
+
+";
+
+# set query variables to empty values
+source_xml_file="";output_xml_file="";
+
+# read command options
+while getopts "ts:o:h?" getopts_option
+do
+  case $getopts_option in
+    t ) test_query=1;;
+    s ) source_xml_file="$OPTARG";;
+    o ) output_xml_file="$OPTARG";;
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# validate options
+# source XML file is required and must exist
+[ "$source_xml_file" = "" ] && echo "-s (source XML file) is required;$help_usage" 1>&2 && exit 2;
+[ ! -e "$source_xml_file" ] && echo "Can't find source XML file $source_xml_file;$help_usage" 1>&2 && exit 5;
+
+
+# run xquery, get raw result
+if [ "$test_query" = 1 ]; then
+    if [ "$output_xml_file" != "" ]; then 
+        echo "java -cp $XQUERY_CLASS_PATH $XQUERY_CLASS $XPRETTY_OPTIONS -s:$source_xml_file -qs:/ -o:$output_xml_file" ;
+    else
+        echo "java -cp $XQUERY_CLASS_PATH $XQUERY_CLASS $XPRETTY_OPTIONS -s:$source_xml_file -qs:/";
+    fi; 
+else
+    if [ "$output_xml_file" != "" ]; then 
+        output_xml_folder=${output_xml_file%/*};
+        [ -d "$output_xml_folder" ] || mkdir -p "$output_xml_folder";
+        java -cp "$XQUERY_CLASS_PATH" $XQUERY_CLASS $XPRETTY_OPTIONS -s:"$source_xml_file" -qs:/ | sed -n -f "${script_path}/fix_xml_pretty.sed" > "$output_xml_file" ;
+    else
+        java -cp "$XQUERY_CLASS_PATH" $XQUERY_CLASS $XPRETTY_OPTIONS -s:"$source_xml_file" -qs:/ | sed -n -f "${script_path}/fix_xml_pretty.sed"
+    fi; 
+fi;
+
+
+exit 0;
+

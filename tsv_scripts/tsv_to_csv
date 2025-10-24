@@ -1,0 +1,45 @@
+#!/bin/sh
+# This script converts TSV files to CSV
+# Author: mklement0 on stackoverflow, taken from their solution to 
+# https://stackoverflow.com/questions/22419979/how-do-i-convert-a-tab-separated-values-tsv-file-to-a-comma-separated-values
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+$command_name converts the file given as the first parameter
+to CSV and outputs to STDOUT
+
+Syntax of $command_name:
+
+$command_name FILE
+
+";
+
+# read command options
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+
+awk 'BEGIN { FS="\t"; OFS="," } {
+  rebuilt=0
+  for(i=1; i<=NF; ++i) {
+    if ($i ~ /,/ && $i !~ /^".*"$/) { 
+      gsub("\"", "\"\"", $i)
+      $i = "\"" $i "\""
+      rebuilt=1 
+    }
+  }
+  if (!rebuilt) { $1=$1 }
+  print
+}' $1

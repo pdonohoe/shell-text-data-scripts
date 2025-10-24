@@ -1,0 +1,23 @@
+# Define RIF_FILE files to clean HTML entities
+# for all HTML entities
+
+RIF_FILE: :html_clean_entities_ISOnum.rif
+RIF_FILE: :html_clean_entities_ISOamsn.rif
+RIF_FILE: :html_clean_entities_ISOtech.rif
+RIF_FILE: :html_clean_entities_ISOdia.rif
+RIF_FILE: :html_clean_entities_ISOpub.rif
+RIF_FILE: :html_clean_entities_ISOlat1.rif
+RIF_FILE: :html_clean_entities_ISOlat2.rif
+RIF_FILE: :html_clean_entities_ISOamso.rif
+RIF_FILE: :html_clean_entities_ISOgrk3.rif
+RIF_FILE: :html_clean_entities_ISOamsr.rif
+RIF_FILE: :html_clean_entities_ISOcyr1.rif
+RIF_FILE: :html_clean_entities_ISOcyr2.rif
+RIF_FILE: :html_clean_entities_ISOmopf.rif
+RIF_FILE: :html_clean_entities_ISOmscr.rif
+RIF_FILE: :html_clean_entities_ISOmfrk.rif
+RIF_FILE: :html_clean_entities_ISOamsa.rif
+RIF_FILE: :html_clean_entities_ISOamsb.rif
+RIF_FILE: :html_clean_entities_ISOamsc.rif
+RIF_FILE: :html_clean_entities_ISObox.rif
+RIF_FILE: :html_clean_entities_new.rif

@@ -1,0 +1,57 @@
+#!/bin/sh
+# script name: rel2abs
+# Author: Paul Donohoe
+# Desription: converts a relative path given as the first parameter into an absolute path
+# make sure file is specified
+
+# get name of this script
+command_name=$(basename "$0");
+# get current path
+current_path=$(pwd);
+
+help_usage="
+
+$command_name converts a relative path into an absolute path. The path does not need to exist.
+
+$command_name PATH
+";
+
+# read command options
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# exit if there is not exactly one argument
+if [ "$#" -ne 1 ]; then echo "ERROR: $command_name requires exactly one argument;$help_usage"; 1>&2; exit 1; fi;
+
+# already absolute case
+if [ "$(printf %.1s "$1")" = "/" ] || [ "$current_path" = "/" ];
+then
+  absolute_path="";
+else
+  absolute_path="$current_path";
+fi;
+# loop thru path
+old_ifs=$IFS;
+IFS="/";
+for path_folder in $1;
+do
+  if [ -n "$path_folder" ];
+  then
+    if [ "$path_folder" = ".." ];
+    then
+      absolute_path="${absolute_path%/*}";
+    elif [ "$path_folder" != "." ];
+    then
+      absolute_path="$absolute_path/$path_folder";
+    fi;
+  fi;
+done;
+IFS=$old_ifs;
+echo "$absolute_path";
+exit 0;

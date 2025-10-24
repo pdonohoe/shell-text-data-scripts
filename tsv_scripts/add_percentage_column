@@ -1,0 +1,153 @@
+#!/usr/bin/perl
+
+# add-percentage-column
+
+# copies a TSV file and adds a new column after the given column
+# The new column values are the percentage of the values of the 
+# given column to the total sum of the given column
+# option p defines the number of decimal points to output (default 1)
+# option m defines the multiplier applied to the percentage (default 1)
+
+
+use strict;
+use warnings;
+use utf8;
+use open qw/:std :utf8/;
+
+use Getopt::Std;
+
+use Cwd;
+use Cwd qw(abs_path cwd getcwd);
+use File::Basename;
+use Data::Dumper;
+
+sub exitwitherror ($);
+sub doline ($);
+
+########### FILE HEADER
+
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
+
+
+my $comname=basename $0;
+# set a variable for the TAB character
+my $tab="\t";my $nl="\n";
+
+
+# Define global variables
+my (%opts, $inputfile, @lines, @cols, $line, $multiplier, $points, $lowcolumn, $columnexists, $columnshavetext, $perlcol, $perc, $percd, $sum);
+########### HELP 
+
+# set the command syntax help text
+my $syntax=qq^
+
+Syntax: 
+$comname -c COLUMN [ -m MULTIPLIER ] [ -p DECIMAL POINTS ] FILE
+
+LINES | $comname -c COLUMN [ -m MULTIPLIER ] [ -p DECIMAL POINTS ]
+
+REQUIRED OPTIONS:
+-c      The number of the column to percentify
+
+OPTIONAL OPTIONS:
+-?      Prints this help, does not run the script.
+
+-m      A multiplier applied to the percentage (default 1)
+-p      The number of decimal points printed for the percentage (default 1)
+^;
+
+$multiplier=1;
+$points=1;
+@lines=();
+$lowcolumn=0;
+$columnexists=0;
+$columnshavetext=0;
+$sum=0;
+
+############# GETOPTS
+
+unless (getopts('?c:m:p:', \%opts)) { exitwitherror("invalid option found\n$syntax"); }
+if (exists $opts{'?'}) { print STDOUT $syntax; exit -1;}
+
+# validate arguments and options
+
+unless ($opts{c} =~ m%^[1-9][0-9]*$%) { exitwitherror("option c must be a positive integer\n$syntax"); }
+
+if (exists $opts{m}) { 
+    unless ($opts{m} =~ m%^[0-9.]+$%) { exitwitherror("option m must be a positive number\n$syntax"); }
+    $multiplier=$opts{m};
+}
+
+if (exists $opts{p}) { 
+    unless ($opts{p} =~ m%^[0-9]+$%) { exitwitherror("option p must be a positive whole number\n$syntax"); }
+    $points=$opts{p};
+}
+
+$perlcol = $opts{c} - 1;
+
+# if a parameter is given, use that as the input instead of STDIN
+if (scalar(@ARGV) > 0) {
+	$inputfile=$ARGV[0];
+	unless (-e $inputfile) { exitwitherror("Can't find file $inputfile\n"); };
+	$/ = "\n"; # enable line mode for all reads
+	open my $fh, $inputfile or die "Cant open $inputfile: $!";
+	while ($line = <$fh>) { 
+		doline($line);
+	}
+} else {
+	# parameter not given, so read from STDIN
+	while (<>) {
+        $line=$_;
+		doline($line);
+	}
+}
+
+if ($columnexists == 0) { exitwitherror("column $opts{c} not found in text\n$syntax"); }
+
+if ($lowcolumn > 0) { print STDERR "$comname: WARNING: column $opts{c} not present in $lowcolumn lines\n"; }
+
+if ($columnshavetext > 0) { print STDERR "$comname: WARNING: column $opts{c} has text in $columnshavetext lines\n"; }
+
+# loop through all lines stored in @lines, and sum the values of the given column
+for $line (@lines) { 
+    @cols=split(/\t/, $line);
+    if ($#cols < $perlcol) { 
+        print "$line\n"; 
+    } else {
+        $perc = $cols[$perlcol] * 100 * $multiplier / $sum;
+        $percd = sprintf('%.' . $points . 'f', $perc);
+        print join("\t", @cols[0..$perlcol]), "\t", $percd;
+        if ($perlcol < $#cols) {
+            print "\t", join("\t", @cols[$perlcol..$#cols]);
+        }
+        print "\n";
+    }
+#print join("\t", @cols), "\n";
+}
+
+exit 0;
+
+# function doline - pushes line to @lines array, and sum the values of the given column
+sub doline ($) {
+	my $line = shift;
+	$line=~s%[\n\r]+%%g;
+    push (@lines, $line);
+    @cols=split(/\t/, $line);
+    if ($#cols < $perlcol) { 
+        $lowcolumn++; 
+    } else {
+        $columnexists=1;
+        if ($cols[$perlcol] =~ m%^\s*[0-9.]*\s*$%) {
+            $sum+=$cols[$perlcol];
+        } else {
+            $columnshavetext++;
+        }
+    }
+}
+
+sub exitwitherror ($) {
+	my $string = shift;
+	print STDERR "$comname: ERROR: $string\n";
+	exit 0;
+}

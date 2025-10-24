@@ -1,0 +1,10 @@
+let $currpath:="CURRPATH"
+let $filelist:="FILELISTSTRING"
+let $files:=fn:tokenize($filelist, "£")
+for $file in $files
+let $winfile:= if (fn:substring($file, 1, 1) eq "/") then $file else fn:concat($currpath, "/", $file)
+let $winfile:=fn:replace($winfile, "^/([A-Za-z])/","/$1:/")
+let $currpath:=fn:replace($currpath, "^/([A-Za-z])/","/$1:/")
+let $doc:=fn:doc($winfile)
+let $root:=$doc/*
+ 

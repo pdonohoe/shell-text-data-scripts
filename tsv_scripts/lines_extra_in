@@ -1,0 +1,38 @@
+#!/bin/sh
+# finds all lines in compare that are not in source
+# cse sensitive, excludes blank lines
+# does not require either to be sorted
+# so can be slow or very slow with larger files
+command_name=$(basename "$0");
+case $# in
+1) 
+# only one parameter is given, source will be the input stream
+compare=$1;
+[ ! -e "$compare" ] && echo "compare $compare does not exist, quitting";
+source="${USER_DIR}/linesextrain-temp";
+# save the input stream (minus blank lines) to a temporary file
+sed '/^$/d' > "$source";;
+2)
+# two parameters given, first is source
+source=$1;compare=$2;
+[ ! -e "$source" ] && echo "source $source does not exist, quitting";
+[ ! -e "$compare" ] && echo "compare $compare does not exist, quitting";
+[ "$source" = "$compare" ] && echo "source and compare are the same ($source), quitting";;
+*) echo "Usage: $command_name source compare
+Or:    [list] $command_name compare" 1>&2; exit 0;;
+esac;
+
+# loop through lines of compare
+while read -r source_line; do
+	# skip blank lines
+	[ "$source_line" = "" ] && continue;
+	# set result to 0
+	lines_same=0;
+	# loop through lines of compare
+	while read -r compare_line; do
+		# exit inner loop if lines are the same
+		[ "$source_line" = "$compare_line" ] && lines_same=1 && break; # && echo "same $compare_line"
+	done < "$source";
+	# write compare line if not found in source
+	[ "$lines_same" -eq 0 ] && echo "$source_line";
+done < "$compare" ;

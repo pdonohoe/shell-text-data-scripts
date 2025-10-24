@@ -1,0 +1,61 @@
+#!/usr/bin/sh
+command_name=$(basename "$0");
+help_usage="
+SYNTAX: $command_name [ -f FOLDER ] FILELIST
+
+For each file name listed in the given file, copies the file to
+  the folder given by the -f parameter
+
+REQUIRED OPTIONS:
+-f FOLDER   Destination folder
+
+OPTIONAL OPTIONS:
+-l          Do not copy source folder tree; copy all found files to the 
+              destination folder (duplicate filenames will overwrite)
+-o          Overwrite destination folder
+
+";
+
+# default is to retain subfolder structure
+remove_folders=0;
+overwrite_folder=0;
+
+# read options
+while getopts "f:loh?" getopts_option
+do
+  case $getopts_option in
+    f ) new_root_fol="$OPTARG";; 
+    l ) remove_folders=1;;
+    o ) overwrite_folder=1;;
+    h | \? ) echo "$help_usage"; exit 0;;
+  esac;
+done;
+shift $((OPTIND - 1));
+
+
+[ "$overwrite_folder" -eq 0 ] && [ -d "$new_root_fol" ] && echo "$new_root_fol exists (-o option not given), exiting" && exit;
+[ "$new_root_fol" = "" ] && echo "-f new_root_fol not supplied, exiting" && exit;
+
+# there must be exactly one parameter
+case $# in
+1 ) ;;
+* )  echo "Syntax: $command_name -f foldername file-list-file" 1>&2;
+	exit 0;;
+esac
+
+file_list_file="$1";
+
+[ ! -e "$file_list_file" ] && echo "file list file $file_list_file does not exist, exiting" && exit;
+
+while read -r file ; do 
+[ ! -e "$file" ] && echo "$file does not exist" && continue;
+if [ "$remove_folders" -eq 1 ]; then
+  new_file="${file##*/}";
+else
+  new_file="$file";
+fi
+new_file="$new_root_fol/$new_file";
+new_folder="${new_file%/*}";
+[ ! -d "$new_folder" ] && mkdir -p "$new_folder";
+cp "$file" "$new_file";
+done < "$file_list_file";

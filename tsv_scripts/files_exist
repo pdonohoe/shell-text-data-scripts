@@ -1,0 +1,62 @@
+#!/bin/sh
+# script name: filesexist
+# Author: Paul Donohoe
+# Description: Reads lines from STDIN. Treats each line as a filepath. 
+# Outputs the line depending on the given options and whether the filepath exists as a file.
+
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+Outputs lines from STDIN depending on the given options and whether each line exists as a file.
+Syntax of $command_name:
+
+[ LINES ] | $command_name [ -y | -n | -b ] 
+
+OPTIONAL OPTIONS:
+-?      Print this summary
+-y      Output the line to STDOUT if it exists as a file (default)
+-n      Output the line to STDOUT if it does not exist as a file
+-b      Output the line to STDOUT if it exists as a file, otherwise output the line to STDERR
+
+";
+
+
+yes=0;
+no=0;
+both=0;
+tab="$(printf '\t')";
+
+# get options from command line
+while getopts "ynbh?" getopts_option
+do
+  case $getopts_option in
+   y ) yes=1;;
+   n ) no=1;;
+   b ) both=1;;
+	h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+
+# validate options
+if [ "$(( $yes + $no + $both ))" -gt 1 ]; then echo "$command_name: ERROR: Options -y, -n and -s are mutually exclusive.$help_usage" 1>&2 ; fi;
+
+# if no options given set option -y - don't need this as yes is not actually used
+# if [ "$(( $yes + $no + $both ))" -eq 0 ]; then yes=1; fi;
+# $(printf '\t')
+# use sed to strip CR (\r) from input lines
+sed 's%\r%%g' | while IFS= read -r stdin_line; do
+	#stdin_line=$(echo "$stdin_line" | sed -r 's%^\r%%;s%\r$%%')
+  #echo ":$stdin_line;";
+  if [ "$no" -eq 1 ]; then
+    [ ! -e "$stdin_line" ] && echo "$stdin_line";
+	else
+    [ -e "$stdin_line" ] && echo "$stdin_line";
+    if [ "$both" -eq 1 ]; then
+      [ ! -e "$stdin_line" ] && echo "$stdin_line" 1>&2;
+    fi;
+	fi;
+done  ;

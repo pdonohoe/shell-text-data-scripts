@@ -1,0 +1,61 @@
+#!/bin/sh
+# This script is a variation on uniq
+# Given a delimiter and a column number, it prints out only the first lines
+# where the value in the column is duplicated in the file
+# The lines do not need to be sorted
+# This command can only accept input from STDIN, arguments are ignored
+# See https://stackoverflow.com/questions/1450085/list-only-duplicate-lines-based-on-one-column-from-a-semi-colon-delimited-file
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name -d delimiter -f column
+
+REQUIRED OPTIONS:
+-f      Field to uniq on
+
+OPTIONAL OPTIONS:
+-d      character used as delimiter (TAB is used as a default)
+
+Examples: 
+$command_name -f 6
+$command_name -d; -f 3
+
+";
+
+sep="$(printf '\t')";
+
+# read command options
+while getopts "f:d:h?" getopts_option
+do
+  case $getopts_option in
+    d ) sep="$OPTARG";;	
+	f ) field="$OPTARG";; 
+	h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# validate options
+# option -f is required 
+[ "$field" = "" ] && echo "Must specify field -f;$help_usage" 1>&2 && exit 0;
+
+awk -v col="$field" -v sep="$sep" 'BEGIN { FS = sep } {
+    # Keep count of the fields in second column
+    count[$col]++;
+
+    # Print the line the first time we encounter a unique field
+    if (count[$col] == 1)
+        print;
+}'
+
+

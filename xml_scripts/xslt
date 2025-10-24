@@ -1,0 +1,155 @@
+#!/bin/bash
+# script name: xslt
+# Author: Paul Donohoe
+# Description: runs a given XSLT stylesheet on a given XML file, output to either STDOUT or a given file
+
+# Requirements: Java, Saxon HE Java implementation of XSLT (minimum version saxon9he.jar and xml-resolver-1.2.jar)
+
+# Dependencies: fix-xml-pretty.sed
+
+# Global variables required: JAVA_OPTIONS, XSLT_CLASS_PATH, XSLT_CLASS, XSLT_OPTIONS
+# Optional global variables: SCRIPTS_PATH
+
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+$command_name -s xml-file -f xslt_file [ -o xml_file [ -p html_file ] ] [ parameters ]
+
+REQUIRED OPTIONS:
+-f      path to XSLT file
+EITHER:
+-s      path to source XML file
+OR:
+-m      name of starting template
+
+OPTIONAL OPTIONS:
+-o      path to output file
+-p      path to profile file
+-l      do not allow tags to span multiple lines
+
+-t      Output the Java command to STDERR; do not run the command
+-?      Print this summary
+
+Examples: 
+$command_name 
+";
+
+# get current path
+current_path=$(pwd);
+
+source_xml_file="";
+fix_xml_lines=0;
+unexpand=0;
+expand=0;
+
+while getopts "tls:m:f:o:p:u:e:h?" getopts_option
+do
+  case $getopts_option in
+    t ) test_query=1;;
+    s ) source_xml_file="$OPTARG";;
+    m ) main_template="$OPTARG";;
+    f ) xsl_file="$OPTARG";; 
+    o ) output_xml_file="$OPTARG";;	
+    p ) profile_file="$OPTARG";;
+    l ) fix_xml_lines=1;;
+    u ) unexpand="$OPTARG";;
+    e ) expand="$OPTARG";;
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+#parameters='execute_path="'"$current_path"'" scripts_path="'"$SCRIPTS_PATH"'" input_file="'"$source_xml_file"'" output_file="'"$output_xml_file"'" "testparam= my test param"';
+
+# validate options
+if [ "$source_xml_file" = "" ]; then
+  [ "$main_template" = "" ] && echo "either -s (source XML file) or -m (name of main template) is required$help_usage" 1>&2 && exit 0;
+else
+  [ "$main_template" != "" ] && echo "only one of -s (source XML file) or -m (name of main template) can be given$help_usage" 1>&2 && exit 0;
+  [ ! -e "$source_xml_file" ] && echo "Can't find source XML file $source_xml_file;$help_usage" 1>&2 && exit 0;
+  [ "$source_xml_file" == "$output_xml_file" ] && echo "-o (output XML file) must be different from -s (source XML file)$help_usage" 1>&2 && exit 0;
+fi;
+
+[ "$xsl_file" = "" ] && echo "-f (XSLT file) is required$help_usage" 1>&2 && exit 0;
+[ ! -e "$xsl_file" ] && echo "Can't find XSLT file $xsl_file;$help_usage" 1>&2 && exit 0;
+
+[ "$output_xml_file" = "" ] && [ "$profile_file" != "" ]  && echo "Cannot specify profile -p without output xml file -o;$help_usage" 1>&2 && exit 0;
+
+[ "$xsl_file" != "" ] && [ ! -e "$xsl_file" ] && echo "Can't find XSL file $xsl_file;$help_usage" 1>&2 && exit 0;
+
+# unexpand must be an integer
+[ "$( echo "$unexpand" | egrep "^[0-9][0-9]*$")" = "" ] && echo "-u (unexpand) option must be a positive integer$help_usage" 1>&2 && exit 0;
+
+# expand must be an integer
+[ "$( echo "$expand" | egrep "^[0-9][0-9]*$")" = "" ] && echo "-e (expand) option must be a positive integer$help_usage" 1>&2 && exit 0;
+
+# only one of expand, unexpand can be different from zero
+[ "$expand" != "0" ] && [ "$expand" != "0" ] && echo "Only one of -e (expand) and -u (unexpand) options can be different from 0$help_usage" 1>&2 && exit 0;
+
+declare -A parameters;
+
+parameters[execute_path]="$current_path";
+parameters[xslt_file]="$xsl_file";
+parameters[scripts_path]="$SCRIPTS_PATH";
+parameters[input_file]="$(getabsolutepath "$source_xml_file")";
+parameters[main_template]="$main_template";
+parameters[output_file]="$(getabsolutepath "$output_xml_file")";
+
+parameter_string="$(for p in "${!parameters[@]}"; do echo -n "${p}=\"${parameters[${p}]}\" "; done)";
+
+# add any given parameters to the $parameters variable
+parameter_string="$parameter_string $*";
+
+# debug tests
+#echo "source_xml_file:$source_xml_file"
+#echo "parameter_string:$parameter_string"
+
+# CREATE COMMAND
+
+# create XSLT command, output to STDOUT
+if [ "$source_xml_file" != "" ]; then
+  my_command="java $JAVA_OPTIONS -cp \"$XSLT_CLASS_PATH\" $XSLT_CLASS $XSLT_OPTIONS -s:\"$source_xml_file\" -xsl:\"$xsl_file\" ";
+else
+  my_command="java $JAVA_OPTIONS -cp \"$XSLT_CLASS_PATH\" $XSLT_CLASS $XSLT_OPTIONS -it:\"$main_template\" -xsl:\"$xsl_file\" ";
+fi;
+# add profiling to named output file if -p specified
+if [ "$profile_file" != "" ]; then
+  my_command="${my_command} -TP:\"$profile_file\"";
+fi;
+
+my_command="${my_command} $parameter_string";
+
+# collapse multi-line XML elements to one line, if -l specified
+if [ "$fix_xml_lines" = 1 ]; then
+    my_command="${my_command} | sed -n -f fix_xml_pretty.sed";
+fi;
+
+# replace leading spaces with tabs, if -u specified
+if [ "$unexpand" != 0 ]; then
+    my_command="${my_command} | unexpand --first-only -t ${unexpand} | sed 's%\t *%\t%g' ";
+# replace leading tabs with spaces, if -e specified
+elif [ "$expand" != 0 ]; then
+    my_command="${my_command} | expand --initial -t ${expand} | sed 's%\t *%\t%g' ";
+fi;
+
+# redirect STDOUT to named file, if -o specified
+if [ "$output_xml_file" != "" ]; then
+  my_command="${my_command} > \"$output_xml_file\" ";
+fi;
+
+# execute command, or output command to STDOUT if -t specified
+if [ "$test_query" = 1 ]; then
+  echo "$my_command";
+else
+  eval "$my_command";
+fi;
+exit

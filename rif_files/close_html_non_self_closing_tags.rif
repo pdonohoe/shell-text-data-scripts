@@ -1,0 +1,12 @@
+# replace_in_files file to close common HTML tags that can be non-closing
+
+-i -s '(<link [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<meta [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<base [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<img [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<input [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<source [^>]*[^/>])>' -r '${1}/>'
+-i -s '(<hr [^>]*[^/>])>' -r '${1}/>'
+-i -s '<(br [^>]*[^/>])>' -r '${1}/>'
+-i -s '<hr>' -r '<hr/>'
+-i -s '<br>' -r '<br/>'

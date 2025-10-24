@@ -1,0 +1,5 @@
+# Define RIF_FILE files to clean HTML entities
+RIF_FILE: :html_clean_entities_main.rif
+RIF_FILE: :html_clean_entities_accent.rif
+RIF_FILE: :html_clean_entities_other.rif
+RIF_FILE: :html_clean_entities_greek.rif

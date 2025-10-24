@@ -1,0 +1,34 @@
+#!/bin/sh
+# This script reads a sequence of lines from STDIN, and 
+# outputs the first instance of each unique line. 
+# It outputs the count of that line to a new first column.
+# Retains original sort order
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+$command_name returns the unique lines from STDIN
+It prepends the count of each unique line as a new first column
+
+Syntax of $command_name:
+
+[ LINES ] | $command_name 
+
+";
+
+# read command options
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+   h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+awk 'BEGIN {pos=1} END { for (mypos = 1; mypos < pos; mypos++) { item = myarray[mypos]; print (myhash[item], "\t", item); } } { if (!($0 in myhash)) { myarray[pos]=$0; pos++; }; myhash[$0]++; }'

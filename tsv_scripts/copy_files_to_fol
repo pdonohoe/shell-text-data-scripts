@@ -1,0 +1,55 @@
+#!/usr/bin/sh
+command_name=$(basename "$0");
+help_usage="
+SYNTAX: $command_name [ -f FOLDER ] file [ ... file ]
+
+For each file name given as a parameter, copies the file to
+  the folder given by the -f parameter
+
+REQUIRED OPTIONS:
+-f      destination folder
+
+OPTIONAL OPTIONS:
+    
+  -l    remove subfolder paths when copying
+
+";
+
+# default is to retain subfolder structure
+remove_folders=0;
+
+# read options
+while getopts "f:lh?" getopts_option
+do
+  case $getopts_option in
+    f ) new_root_folder="$OPTARG";;
+    l ) remove_folders=1;;
+    h | \? ) echo "$help_usage"; exit 0;;
+  esac;
+done;
+shift $((OPTIND - 1));
+
+
+
+
+#[ -d "$new_root_folder" ] && echo "$new_root_folder exists, exiting" && exit;
+[ "$new_root_folder" = "" ] && echo "-f new_root_folder not supplied, exiting" && exit;
+
+# there must be at least one parameters
+case $# in
+[0] )  echo "Too few arguments" 1>&2;
+       exit 0 ;;
+esac
+
+for file ; do 
+[ ! -e "$file" ] && echo "$file does not exist" && continue;
+if [ "$remove_folders" = "1" ]; then
+  new_file="${file##*/}";
+else
+  new_file="$file";
+fi
+new_file="$new_root_folder/$new_file";
+new_folder="${new_file%/*}";
+[ ! -d "$new_folder" ] && mkdir -p "$new_folder";
+cp "$file" "$new_file";
+done

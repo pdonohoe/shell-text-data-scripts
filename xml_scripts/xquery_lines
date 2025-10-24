@@ -1,0 +1,319 @@
+#!/bin/bash
+# This script is extended from the script "xquery".
+# This script executes a given XQuery script against a given list of XML files.
+# Requirements: Java, Saxon HE Java implementation of XQuery (minimum version saxon9he.jar and xml-resolver-1.2.jar)
+
+# Global variables required: JAVA_OPTIONS, XQUERY_CLASS_PATH, XQUERY_CLASS
+
+# Uses environment variable $TMPDIR , if this is not set to a valid folder, this script exits with an error
+
+# Options are available to:
+# a) Remove the XML declaration from the output
+# b) Strip namespace declarations from the output
+# c) Indent the output (pretty print)
+# d) Convert self-closing elements to start and end tags
+# e) Cater for text-only output, to get round Saxon limitations
+# f) Supply the xquery inline as a string; or in a separate file
+# g) Prepend the xquery with a prolog from a file
+
+# The "xquery" script is run on a single file at a time, which can take a very long time for many files.
+# This script speeds the process up by collating the source XML file names into a string, then
+# splitting the string into fields. The first field is assumed to be a file name. 
+# Each file is then read within the xquery script.
+# This means the script only has to run once.
+# However, this means that:
+# a) This script can only accept a partial xquery script as a parameter, as it must supply the 
+#    initial for loop
+# b) The script creates xquery variables $files, $file, $winfile, $doc and $root
+# c) The given partial xquery must reference one of these variables
+# d) The Saxon implementation will return the following warning message to STDERR:
+#      Source document ignored - query can be evaluated without reference to the context item
+
+# Note: this script should not be run using xargs, as this will split the supplied lines by whitespace.
+# Instead, the lines should be piped via STDIN to this script. 
+# Each line will be split into an array using TAB as delimiter. The first item in each array is assumed
+# to be an XML file to be processed. 
+
+# The following variables are passed to the XQuery:
+# $files - the list of files, as a sequence
+# $file - the filename of each file
+# $winfile - the Windows filename: if the file starts with /x/, this is replaced by X:/
+# $doc - the document node of the file
+# $root - the root node(s) of the file
+# $line - the entire line
+# $items - the array, as a sequence (so $items[1] = $file)
+
+# The XQuery supplied is executed for each $file
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+# get current path
+current_path=$(pwd);
+
+# get Java version of the directory
+script_path_java="$(echo "$script_path" | sed 's%/\([a-z]\)/%/\1:/%';)";
+[ "$TMPDIR" == "" ] && echo "$command_name: ERROR: environment variable \$TMPDIR is not set" 1>&2 && exit 1;
+[ ! -d "$TMPDIR" ] && echo "$command_name: ERROR: environment variable \$TMPDIR is not set to a valid foder" 1>&2 && exit 1;
+
+help_usage="
+
+Syntax of $command_name:
+
+$command_name [-t] [-eiloxs] [ -p user_prolog_file | -d ] ( -f xquery_file | -q xquerystring ) xml_file [ ... xml_file ]
+[ list of XML files ] | $command_name [-t] [-eilox] [ -p user_prolog_file | -d ] ( -f xquery_file | -q xquerystring ) 
+
+REQUIRED OPTIONS:
+-f FILE   Path to file containing partial XQuery
+OR
+-q QUERY  Partial XQuery as a string
+
+OPTIONAL OPTIONS:
+-c        Collate indented XML lines to one line (requires sed)
+-e        Expands empty elements to start and end tags
+-i        Indents output XML using Saxon '!indent=yes'
+-l        Line output required. Extracts content of <xqstring></xqstring> 
+            elements, one line for each
+-o        Strips XML declaration using Saxon '!omit-xml-declaration=yes'
+-x        Strips all XML namespaces from output
+-z        Serialization required. Replace &lt; with < etc
+-s        Show progress, one line per batch of XML files processed
+
+-p FILE   Path to prolog file. Contents of prolog file prepended to the query
+OR
+-d        Use the default prolog file in this script's folder
+
+-a FILE   Append this file to the prolog file
+
+-t        Output the generated Java command to STDERR; do not run the command
+
+Examples: 
+$command_name 
+$command_name -s mds201199a.xml -q 'for \$p in $root//doc:pp return <xqstring>{\$p}</xqstring>'
+$command_name -s mds201199a.xml -f myquery.xqy -o
+
+";
+
+# set query variables to empty values
+query="";
+query_file="";
+user_query_file="";
+output_xml_dec="";
+indent_xml="";
+
+# set default prolog files
+default_prolog_file="${script_path}/xq_prolog";
+append_to_prolog_file="${script_path}/xquery_lines_start";
+
+# get a dummy XML file to supply to the XMLfile parameter required for the Saxon XQuery implementation
+xml_file="${script_path}/empty.xml"
+
+prolog="";
+user_query_file="";
+user_prolog_file="";
+use_default_prolog_file=0;
+strip_string_element=0;
+strip_xml_namespaces=0;
+expand_empty_elements=0;
+test_query=0;
+collate_xml=0;
+serialize=0;
+show_progress=0;
+
+# read command options
+while getopts "cdeilostxzq:f:p:a:h?" getopts_option
+do
+  case $getopts_option in
+    t ) test_query=1;;
+    q ) query="$OPTARG";;	
+    f ) user_query_file="$OPTARG";; 
+    p ) user_prolog_file="$OPTARG";;
+    d ) use_default_prolog_file=1;;
+    a ) append_to_prolog_file="$OPTARG";;
+    o ) output_xml_dec='!omit-xml-declaration=yes';;
+    l ) strip_string_element=1;;
+    e ) expand_empty_elements=1;;
+    i ) indent_xml='!indent=yes';;
+    x ) strip_xml_namespaces=1;;
+    c ) collate_xml=1;;
+    z ) serialize=1;;
+    s ) show_progress=1;;
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+# validate options
+
+# options -f and -q are required and mutually exclusive
+[ "$query" = "" ] && [ "$user_query_file" = "" ] && echo "Must specify either -q or -f;$help_usage" 1>&2 && exit 1;
+[ "$query" != "" ] && [ "$user_query_file" != "" ] && echo "Can't specify both -q and -f;$help_usage" 1>&2 && exit 1;
+
+# append_to_prolog_file file must exist
+if [ ! -e "$append_to_prolog_file" ]; then
+	echo "ERROR: $command_name: Can't find required xquery file for processing files $append_to_prolog_file" 1>&2; 
+	exit 1 ;
+fi;
+
+# if partial query file is given, it must exist
+if [ "$user_query_file" != "" ]; then
+	[ ! -e "$user_query_file" ] && echo "Can't find XQuery file $user_query_file;$help_usage" 1>&2 && exit 1;
+fi;
+
+# options -p and -d are optional but mutually exclusive, if one is given, it must exist, read it if it does
+if [ "$use_default_prolog_file" -ne 0 ]; then
+    if [ "$user_prolog_file" != "" ]; then
+	    echo "Can't specify both -p and -d;$help_usage" 1>&2; exit 1;
+	else
+	    if [ ! -e "$default_prolog_file" ]; then
+		   echo "ERROR: $command_name: Can't find prolog file $default_prolog_file;$help_usage" 1>&2; exit 1 ;
+		else
+	        prolog=$(cat "$default_prolog_file");
+		fi;
+	fi;
+else 
+    if [ "$user_prolog_file" != "" ]; then
+	    if [ ! -e "$user_prolog_file" ]; then
+		   echo "ERROR: $command_name: Can't find prolog file $user_prolog_file;$help_usage" 1>&2; exit 1;
+		else
+	        prolog=$(cat "$user_prolog_file");
+		fi;
+	fi;
+fi;
+
+
+
+# if prolog append file given, it must exist, append it if it does
+if [ "$append_to_prolog_file" != "" ]; then
+	if [ -f "$append_to_prolog_file" ]; then
+		xquery_prolog=$(cat "$append_to_prolog_file");
+	else
+		echo "ERROR: $command_name: Can't find prolog file $append_to_prolog_file;$help_usage" 1>&2; exit 1 ;
+	fi
+else
+	xquery_prolog="";
+fi;
+
+# combine prolog and xquery_prolog
+this_prolog="$prolog $xquery_prolog";
+
+# replace any variables defined
+
+# count the number of replacements to make
+rep_count=$(echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_]*!' | sort | uniq | wc -l);
+if [ "$rep_count" -eq "0" ]; then
+	echo "$this_prolog";
+else
+	rep_no=0;
+	this_prolog="$(
+	# loop through variable references
+	echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_]*!' | sort | uniq | while read -r var_ref_string; do
+	# increment the current replacement number
+	rep_no=$(( rep_no + 1));
+	# get the variable name from the reference string
+	var_ref=$(echo "$var_ref_string" | sed 's%^VAR:!%%;s%!%%');
+	# get the value of the variable
+	var_replacement=${!var_ref};
+	# if the variable referenced exists and has a value
+	if [ "$var_replacement" != "" ]; then
+		# replace the variable reference string with the value of the variable
+		if [ "$this_prolog" == "" ]; then
+			this_prolog=$(echo "$this_prolog" | sed "s%$var_ref_string%$var_replacement%g");
+		else
+			this_prolog=$(echo "$this_prolog" | sed "s%$var_ref_string%$var_replacement%g");
+		fi;
+	fi
+	# output the replaced text if the last replacement has been reached
+	if [ "$rep_no" -eq "$rep_count" ]; then echo "$this_prolog"; fi;
+	done;
+)";
+fi
+
+
+collate_xml_lines () { sed -r '$!{s%([^>])$%$1 %;1{h};1!{H};d};${H;x;s%[\n\r]+[\t ]+%%g}'; }
+
+# find . -type f -iname "*.gc"  | sed 's%^\./%%' | xargs echo | while read -r string; do  file=${string%% *}; 
+# xquery -codx -s "$file" -q 'let $tab:="&#09;" 
+# let $filelist:="'"$filelist"'" let $files:=fn:tokenize($filelist, " ") for $file in $files let $doc:=fn:doc($file) let $root:=$doc/* 
+# '; done
+
+# get the list of lines as a string delimited with £, either from parameters to the command, or if none, from STDIN
+line_list_string="";
+# get list of lines into a string
+case $# in
+	# no lines given as parameters to command, use STDIN
+	0) num_lines=0;
+		while IFS="$(printf '\n')" read -r line; do
+			line_list_string="$line_list_string"$(printf "£%s"  "$line");
+			num_lines=$((num_lines + 1));
+		done;;
+	*) num_lines="$#"; line_list_string="$(for i in "$@"; do echo -n "£$i"; done;)";
+esac;
+# remove first character of line_list_string
+line_list_string=$(printf %s "$line_list_string" | sed 's%^.%%');
+
+# protect double quotes in line_list_string
+line_list_string="$(echo "$line_list_string" | sed 's%"%\&quot;%g')";
+
+
+this_prolog="${this_prolog%%LINELISTSTRING*}${line_list_string}${this_prolog##*LINELISTSTRING}";
+this_prolog="${this_prolog%%CURRPATH*}${current_path}${this_prolog##*CURRPATH}";
+
+#echo "$this_prolog" 1>&2; exit;
+
+if [ "$user_query_file" != "" ]; then
+	# option f chosen, xquery is a file, create new file combining it with prolog file
+	#    and files processing prolog file
+	# save in $TMPDIR folder
+	query_file=$(mktemp -t tmp.XXXXXXXXXX) || echo "$command_name: ERROR: \"mktemp\" command failed." 1>&2 ;
+	# combine prolog file and user query file to get temporary query file
+	(echo  "$this_prolog"; cat "$user_query_file") > "$query_file";
+else
+	# option q chosen, create query string
+	query_string="$this_prolog $query";
+fi;
+
+
+
+[ "$show_progress" -eq 1 ] && echo "Processing $numlines lines ..." 1>&2;
+
+# run xquery, get raw result
+if [ "$query" != "" ]; then 
+    if [ "$test_query" -eq 1 ]; then
+        echo "java $JAVA_OPTIONS -cp \"$XQUERY_CLASS_PATH\" \"$XQUERY_CLASS\" $XQUERY_OPTIONS -s:\"$xml_file\" -qs:\"$query_string\" $output_xml_dec $indent_xml";
+        exit 0;
+    else
+		xq_result=$(java $JAVA_OPTIONS -cp "$XQUERY_CLASS_PATH" "$XQUERY_CLASS" $XQUERY_OPTIONS -s:"$xml_file" -qs:"$query_string" $output_xml_dec $indent_xml 2> >(sed "s%Source document ignored - query can be evaluated without reference to the context item%%;/^[\n\r]*$/d" >&2) );
+		exit_code=$?;
+    fi; 
+else
+    if [ "$test_query" -eq 1 ]; then
+        echo "java $JAVA_OPTIONS -cp \"$XQUERY_CLASS_PATH\" \"$XQUERY_CLASS\" $XQUERY_OPTIONS -s:\"$xml_file\" -q:\"$query_file\" $output_xml_dec $indent_xml";
+        exit 0;
+    else
+        xq_result=$(java $JAVA_OPTIONS -cp "$XQUERY_CLASS_PATH" "$XQUERY_CLASS" $XQUERY_OPTIONS -s:"$xml_file" -q:"$query_file" $output_xml_dec $indent_xml 2> >(sed "s%Source document ignored - query can be evaluated without reference to the context item%%;/^[\n\r]*$/d" >&2) );
+	    exit_code=$?;
+    fi; 
+fi;
+
+
+# exit if java xquery call fails
+if [ "$exit_code" != 0 ]; then exit $exit_code; fi;
+
+# strip namespace declarations if requested
+if [ "$strip_xml_namespaces" -ne 0 ]; then xq_result="$(echo "$xq_result" | sed 's% xmlns:[A-Za-z_][A-Za-z_0-9.-]*="[^"]*"%%g; s% xmlns="[^"]*"%%g' | sed ':a;$!{N;ba};s%[[:space:]]*>%>%g')"; fi;
+
+#if [ "$strip_string_element" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%^[[:space:]]*<xqstring>%%;s%</xqstring>[[:space:]]*$%%g;s%</xqstring><xqstring>%\n%g;')"; fi;
+if [ "$strip_string_element" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%[[:space:]]*<xqstring>%%g;s%</xqstring>[[:space:]]*%\n%g;' | sed '/^[[:space:]]*$/d')"; fi;
+
+if [ "$expand_empty_elements" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%<\([^>\t \n\r]*\)\([^>]*\)/>%<\1\2></\1>%g')"; fi;
+
+if [ "$collate_xml" -eq 1 ]; then xq_result="$(echo "$xq_result" | collate_xml_lines)"; fi;
+
+if [ "$serialize" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%&lt;%<%g;s%&gt;%>%g;s%&amp;%&%g')"; fi;
+
+[ "$xq_result" != "" ] && echo "$xq_result";
+#echo
+exit 0;

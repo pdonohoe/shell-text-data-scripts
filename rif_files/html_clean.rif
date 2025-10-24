@@ -1,0 +1,10 @@
+# replace_in_files file to clean HTML files
+
+# add <?xml tag if not present
+-s '^.*<html' -r '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?><html'
+
+# fix non-closing tags
+RIF_FILE: :html_close_void_elements.rif
+
+# Define RIF_FILE files to clean HTML entities
+RIF_FILE: :html_clean_entities_all.rif

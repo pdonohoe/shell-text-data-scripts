@@ -1,0 +1,55 @@
+#!/bin/sh
+# This script reads a TSV file and replaces the tabs with spaces
+# to align the columns visually
+# for each column, it calculates the longest text, then adds padding
+# as required.
+# the number of extra spaces for padding can be specified
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name -s number file [ ... file ]
+
+OPTIONAL OPTIONS:
+-s      number of extra spaces for padding (default 2)
+
+Examples: 
+$command_name -s 4 myfile.tsv
+
+";
+
+extra=2;
+
+# read command options
+while getopts "s:h?" getopts_option
+do
+  case $getopts_option in
+    s ) extra="$OPTARG";;	
+	  h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# validate options
+# option -s must be a positive integer
+if [ "$( echo "$extra" | egrep  "^[0-9]+$")" = "" ]; then 
+  echo "field -s must be a positive integer;$help_usage" 1>&2;
+  exit 0;
+fi;
+
+# use awk to run through each file twice:
+# the first run finds the maximum length of each column
+# the second run replaces the tabs with spaces, padded to the maximum length, plus the specified extra spaces
+for file in "$@"; do
+  awk -F'\t' 'NR==FNR {for (i=1;i<=NF;i++) { if (length($i) > len[i]) {len[i] = length($i)}}; next} 
+  {p=""; for (i=1;i<=NF;i++) { s = sprintf("%*s", (len[i] - length($i) + '"$extra"'), ""); p = p $i s;}; print p}' "$file" "$file"
+done

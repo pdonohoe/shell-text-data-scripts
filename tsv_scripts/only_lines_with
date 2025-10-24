@@ -1,0 +1,48 @@
+#!/bin/bash
+# First argument is string to search for
+# If more arguments are given, searches through each,
+#  else searches through lines from STDIN
+# If the number of times the search string is found is 
+# equal to or greater than the given count (default 1),
+# the string is output to STDOUT
+
+# UNDER CONSTRUCTION
+
+help_usage="
+Syntax of $comname:
+$comname [ -n mincount ] [ -i ] seachstring [ file ... ]
+OPTIONAL OPTIONS:
+-n NUM  Minimum number of occurrences (default 1)
+-i      Set grep options to Fio
+";
+# get name of this script
+command_name=$(basename "$0");
+# set Input Field Separator to newline
+IFS="$(printf '\n')";
+# set case-sensitivity to case-sensitive
+grepopt="-Fo";count=1;
+# read options
+while getopts "n:ih?" getopts_option
+do
+  case $getopts_option in
+    n ) count="$OPTARG";; 
+    i ) grepopt="-Fio";;
+    h | \? ) echo "$help_usage"; exit 0;;
+  esac;
+done;
+shift $((OPTIND - 1));
+
+case $# in
+0) echo 1>&2 "$command_name requires at least one argument";;
+1) search="$1";
+while read -r target_string; do
+ct=$(echo "$target_string" | grep -c $grepopt "$search");
+[ "$ct" -eq "$count" ] && echo "$target_string";
+done;;
+*) search="$1";
+shift;
+for target_string; do
+ct=$(echo "$target_string" | grep -c $grepopt "$search");
+[ "$ct" -eq "$count" ] && echo "$target_string";
+done;;
+esac;

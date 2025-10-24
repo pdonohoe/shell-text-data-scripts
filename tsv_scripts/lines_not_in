@@ -1,0 +1,84 @@
+#!/usr/bin/perl
+# takes two files, returns the lines in file1 that are not present in file2
+# case sensitive, excludes blank lines
+# does not require either to be sorted
+
+# *************  SET UP REFERENCED MODULES AND VARIABLES  *************
+use strict;
+use utf8;
+use File::Basename;
+use Getopt::Std;
+
+use Cwd;
+
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
+$/="\n";           # set <READLINE> terminator to newline
+
+my $comname = basename $0;
+my $dir = cwd();
+my $pwd=cwd();
+
+
+
+# Define variables
+my ($syntax, %opts, $sourceFile, $compareFile, %compareLines, $ignorelineendings, $reverse);
+
+$syntax=qq^
+$comname outputs only those lines in file 1 that do not appear in file 2.
+
+Syntax: 
+$comname -? 
+$comname file1 file2
+$comname <(command 1) <(command 2)
+
+^;
+
+# get the command-line options accepted by this script
+unless (getopts('?lr', \%opts)) { print STDERR "invalid option found\n"; exit 0;}
+
+# print help info and exit if -? or -h option given
+if (exists($opts{'?'}) or exists($opts{'h'})) { print STDERR $syntax; exit 1; }
+
+$ignorelineendings = (exists $opts{'l'}) ? 1 : 0;
+# check two files are given
+unless ($#ARGV == 1 ) { print STDERR "two files are required\n$syntax"; exit 0;}
+
+# set order of files read
+$reverse = (exists $opts{'r'}) ? 1 : 0;
+
+
+# capture the given filenames
+if ($reverse) {
+    $sourceFile = $ARGV[1];
+    $compareFile = $ARGV[0];
+} else {
+    $sourceFile = $ARGV[0];
+    $compareFile = $ARGV[1];
+}
+
+# check for existence of both files
+unless (-e "$sourceFile") { die "ERROR: can't find source file at $sourceFile\n"; };
+unless (-e "$compareFile") { die "ERROR: can't find compare file at $compareFile\n"; };
+
+# open compare file and read lines into a hash
+open(my $f, '<', $compareFile) or print STDERR "Can't read $compareFile\n" && next; 
+while (my $line = <$f>) { 
+    if ($ignorelineendings == 1) { $line =~ s%[\n\r]+%%g; }
+    $compareLines{$line} =1;
+}
+close $f;
+
+# open source file and loop through each line
+open(my $f, '<', $sourceFile) or print STDERR "Can't read $sourceFile\n" && next; 
+while (my $line = <$f>) { 
+    if ($ignorelineendings == 1) { $line =~ s%[\n\r]+%%g; }
+    unless (exists($compareLines{$line})) {
+        print STDOUT $line;
+        if ($ignorelineendings == 1) { print STDOUT "\n"; }
+    }; 
+}
+close $f;
+
+exit 1;
+

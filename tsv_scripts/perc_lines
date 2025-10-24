@@ -1,0 +1,41 @@
+#!/bin/sh
+# This script calculates the percentage of line count of file 1 vs line count of line 2
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name file file
+
+Examples: 
+$command_name myfile1 myfile2
+
+";
+
+# validate parameters
+
+# There must be exactly two parameters
+if [ "$#" -ne 2 ]; then echo "exactly two files are required;$help_usage" 1>&2; exit 0; fi;
+
+# first file is required and must exist
+if [ ! -e "$1" ]; then echo "Can't find file $1;$help_usage" 1>&2; exit 0; fi;
+
+# second file is required and must exist
+if [ ! -e "$2" ]; then echo "Can't find file $2;$help_usage" 1>&2; exit 0; fi;
+
+# get number of lines in first file
+num1=$(wc -l < "$1")
+# get number of lines in second file
+num2=$(wc -l < "$2")
+
+per_mil=$(( num1 * 1000000 / num2 ));
+
+awk -v per_mil=$per_mil 'BEGIN{printf "%.2f\n", per_mil / 10000  }' 
+

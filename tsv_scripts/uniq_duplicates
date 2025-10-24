@@ -1,0 +1,59 @@
+#!/bin/sh
+# This script is a variation on uniq -d
+# It prints out only those duplicated lines
+# The lines do not need to be sorted, but order is not retained
+# This command can only accept input from STDIN, arguments are ignored
+# See https://stackoverflow.com/questions/1450085/list-only-duplicate-lines-based-on-one-column-from-a-semi-colon-delimited-file
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+[ LINES ] | $command_name [ -u ]
+
+OPTIONAL OPTIONS:
+-u      output only one instance of each duplicate line
+
+Examples: 
+cat myfile | $command_name -u
+
+";
+
+uniq=0;
+
+# read command options
+while getopts "uh?" getopts_option
+do
+  case $getopts_option in
+    u ) uniq=1;;	
+	  h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+if [ "$uniq" -eq 0 ]; then
+awk  '{
+    # Keep count of the fields in second column
+    count[$0]++;
+    if (count[$col] > 1)
+        print
+}'
+else
+awk  'END {for (line in count) {
+    if (count[line] > 1)
+        print line
+}}
+{
+    # Keep count of the fields in second column
+    count[$0]++;
+}'
+fi;
+

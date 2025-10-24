@@ -1,0 +1,17 @@
+declare namespace fn="http://www.w3.org/2005/xpath-functions";
+declare namespace expath-file="http://expath.org/ns/file";
+ let $NL := "&#10;"
+ let $filelist:="FILELISTSTRING"
+ let $sourcepathexp:="SOURCEPATHEXP"
+ let $replacepathexp:="REPLACEPATHEXP"
+ let $files:=fn:tokenize($filelist, "£")
+ return 
+ for $file in $files
+ let $winfile:=fn:replace($file, "^/([A-Za-z])/","/$1:/")
+ let $doc:=fn:doc($winfile)
+ let $outfile:=fn:concat(fn:substring-before($winfile, $sourcepathexp), $replacepathexp, fn:substring-after($winfile, $sourcepathexp))
+ return if ($outfile eq $replacepathexp) then <xqperror>ERROR: Cant find source path expression {$sourcepathexp} in source file: {$winfile}</xqperror> else
+ if ($winfile eq $outfile) then <xqperror>ERROR: Cant overwrite source file: {$winfile}</xqperror> else 
+ (: if (fn:unparsed-text-available($outfile)) then <xqperror>ERROR: Destination file exists: {$outfile}</xqperror> else :)
+  (<xqpfile>{$outfile}</xqpfile>, $doc)
+  
