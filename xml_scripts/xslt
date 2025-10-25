@@ -130,7 +130,7 @@ my_command="${my_command} $parameter_string";
 
 # collapse multi-line XML elements to one line, if -l specified
 if [ "$fix_xml_lines" = 1 ]; then
-    my_command="${my_command} | sed -n -f fix_xml_pretty.sed";
+    my_command="${my_command} | sed -n -f $SCRIPTS/xml_scripts/fix_xml_pretty.sed";
 fi;
 
 # replace leading spaces with tabs, if -u specified
