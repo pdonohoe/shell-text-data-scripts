@@ -1,0 +1,43 @@
+#!/bin/sh
+# script name: unix_path_to_win_path
+# Author: Paul Donohoe
+# Description: converts an absolute Unix path to a Windows path
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+$command_name
+
+Examples: 
+$command_name /c/Users/JohnDoe/mypath/myfile.txt
+";
+
+while getopts "h?" getopts_option
+do
+  case $getopts_option in
+	  h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# test if there are any arguments
+if [ "$#" -ge 0 ]; then
+	# files are given as arguments in the command line
+  for arg in "$@"; do 
+    echo "$arg" | sed -r 's%^/(.)/%\1:\\%;s%/%\\%g';
+	done;
+else
+  # no files given as arguments, read from SDTIN
+  # Input coming from STDIN
+  while read -r arg; do
+    echo "$arg" | sed -r 's%^/(.)/%\1:\\%;s%/%\\%g';
+  done;
+fi;

@@ -46,7 +46,6 @@ do
   d ) sep="$OPTARG";;	
 	f ) field="$OPTARG";;
   l ) last_line=1;; 
-
 	h | \? ) echo "$help_usage"; exit 0;
   esac
 done;

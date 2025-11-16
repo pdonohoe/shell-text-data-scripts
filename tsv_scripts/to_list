@@ -31,7 +31,7 @@ OPTIONAL OPTIONS:
 Examples: 
 $command_name < FILE
 (seq 25 35; seq 38 40) | $command_name -q '\"' 
-[ search term list ]  | $command_name -q '' -d '|' 
+[ search term list ] | $command_name -q '' -d '|' 
 
 ";
 

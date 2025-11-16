@@ -17,7 +17,7 @@ Syntax of $command_name:
 $command_name -v
 
 OPTIONAL OPTIONS:
--v      check each path exists
+-v      only output paths that exist
 
 Examples: 
 $command_name 

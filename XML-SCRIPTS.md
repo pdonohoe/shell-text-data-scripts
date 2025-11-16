@@ -1,9 +1,7 @@
 
 # XML processing scripts
 
-These scripts process XML files using XQuery, XSLT or Schematron. They are intended to be run from a Unix command-line shell. They are effectively wrappers around the [Saxon XML processor](https://www.saxonica.com/documentation12/documentation.xml), providing simplified interfaces and adding additional functionality.
-
-These scripts require the Saxon XML processing engine and Java. They were developed and tested using [Saxon HE 1.12](https://www.saxonica.com/html/documentation12/about/index.html); no guarantee is given that they will work with other XML processors. Saxon HE 1.12 supports XSLT versions 1.0, 2.0 and 3.0, and XQuery versions 1.0, 3.0 and 3.1.
+These scripts process XML files using XQuery, XSLT or Schematron. They are intended to be run from a Unix command-line shell. They are effectively wrappers around the [Saxon XML processor](https://www.saxonica.com/documentation12/documentation.xml), providing simplified interfaces and adding additional functionality. These scripts were developed and tested using [Saxon HE 1.12](https://www.saxonica.com/html/documentation12/about/index.html); no guarantee is given that they will work with other XML processors. Saxon HE 1.12 supports XSLT versions 1.0, 2.0 and 3.0, and XQuery versions 1.0, 3.0 and 3.1.
 
 The scripts use bash-specific arrays, so are not POSIX compliant.
 
