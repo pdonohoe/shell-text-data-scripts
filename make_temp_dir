@@ -1,0 +1,38 @@
+#!/bin/sh
+# makes a temporary directory for temporary files
+# from: http://mywiki.wooledge.org/BashFAQ/062
+
+ i=0
+ tempdir=""
+ cleanup() {
+   [ "$tempdir" ] && rm -rf -- "$tempdir"
+   if [ "$1" != EXIT ]; then
+     trap - "$1"          # reset trap, and
+     kill -s "$1" -- "$$"    # resend signal to self
+   fi
+ }
+ for sig in EXIT HUP INT TERM; do
+   trap "cleanup $sig" "$sig"
+ done
+ 
+ # Generate 10 random 6-digit numbers, separated by commas
+ rand=$(
+   awk 'BEGIN { srand(); for (i = 0; i < 10; i++) printf("%06d,", 1e6*rand()) }'
+ )
+ # try to create a random folder using each of these numbers, exit if success
+ while [ "$rand" ]; do
+   tempdir=${TMPDIR:-/tmp}/${rand%%,*}-$$
+   mkdir -- "$tempdir" 2>/dev/null && break
+   echo "$tempdir";
+   ls "$tempdir";
+   echo "$rand";
+   rand=${rand#*,}
+ done
+ 
+ # if all random numbers have been exhausted
+ if [ -z "$rand" ]; then
+   printf 'Could not create temporary directory\n' >&2
+   exit 1
+ fi
+  
+

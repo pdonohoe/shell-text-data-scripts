@@ -12,7 +12,6 @@
 
 # Dependencies: 
 # Uses script "xslt", which in turn requires Saxon
-# Global variables required: SCRIPTS_PATH
 
 # command options
 # -a REQUIRED : Path to a single XSLT for both files
@@ -96,7 +95,7 @@ compare1="$xml_file_1";
 compare2="$xml_file_2";
 
 # create temporary directory for converted XML files as $temp_dir; exit if error
-"$SCRIPTS_PATH"/maketempdir || exit;
+make_temp_dir || exit;
 
 # run XSLT conversions
 # create temporary file; exit on error

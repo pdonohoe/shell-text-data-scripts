@@ -43,7 +43,7 @@ case $# in
 esac;
 
 # create temporary directory for base64 files as $temp_fol; exit if error
-"$SCRIPTS_PATH"/maketempdir || exit;
+make_temp_dir || exit;
 
 for file in "${file_list[@]}"; do 
   if [ ! -e "$file" ]; then echo "$file is not a file" 1>&2; continue; fi;
