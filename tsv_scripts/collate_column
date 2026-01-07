@@ -27,9 +27,9 @@ binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
 binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 
 
-my $comname=basename $0;
+my $command_name = basename $0;
 # set a variable for the TAB character
-my $tab="\t";my $nl="\n";
+my $tab = "\t"; my $nl = "\n";
 
 # set variables
 my (%opts, $inputfile, $f, $contents, @lines, $line, $linecount, $collatecol, $inputsep);
@@ -39,12 +39,12 @@ my (%collate, @items, $collate, $restline, %lines, $valuesep, $countsep, @values
 ########### HELP 
 
 # set the command syntax help text
-my $syntax=qq^
+my $syntax = qq^
 Collates lines (STDIN or file) by a given column
 
-Syntax of $comname:
-$comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] FILE
-LINES | $comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ]
+Syntax of $command_name:
+$command_name -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] FILE
+LINES | $command_name -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ]
 
 REQUIRED OPTIONS:
 -c	  The number of the column to collate
@@ -61,21 +61,21 @@ OPTIONAL OPTIONS:
 ^;
 
 # set the text for more help on this command
-my $morehelp="Use $comname -? for full help on this command
+my $morehelp = "Use $command_name -? for full help on this command
 ";
 
 # set command help examples text
-my $commandhelp="
+my $commandhelp = "
 Examples:
 
-$comname -c 4 FILE 
+$command_name -c 4 FILE 
 ";
 # set command argument error message
-my $arg_error =qq£;
+my $arg_error = qq£;
 
 Usage
-$comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ] FILE
-LINES | $comname -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ]
+$command_name -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ] FILE
+LINES | $command_name -c COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] [ -n [ -b SEPARATOR ] ] [ -x ]
 	 
 Options
 -? : Print this summary
@@ -84,11 +84,11 @@ Options
 
 ############# GETOPTS
 
-unless (getopts('?c:s:a:nb:x', \%opts)) {print STDERR "$comname: ERROR: invalid option found\n$syntax"; exit 0;}
+unless (getopts('?c:s:a:nb:x', \%opts)) {print STDERR "$command_name: ERROR: invalid option found\n$syntax"; exit 0;}
 if (exists $opts{'?'}) { print STDOUT $syntax; exit -1;}
 
 # option -c is required
-unless (exists $opts{'c'}) { print STDOUT "$comname: ERROR: option -c is required\n"; exit -1; }
+unless (exists $opts{'c'}) { print STDOUT "$command_name: ERROR: option -c is required\n"; exit -1; }
 
 $collatecol = $opts{c};
 $inputsep = (exists($opts{s})) ? $opts{s} : $tab;
@@ -98,15 +98,15 @@ $countsep = (exists($opts{b})) ? $opts{b} : ";";
 # validate options
 
 # option c should be a positive integer
-unless ($collatecol=~ m%^[1-9]\d*$%) { print STDERR "$comname: ERROR: Option -c must be a positive integer: $collatecol\n"; exit 1;};
+unless ($collatecol =~ m%^[1-9]\d*$%) { print STDERR "$command_name: ERROR: Option -c must be a positive integer: $collatecol\n"; exit 1;};
 # option b cannot be given unless option a is given
-if (exists($opts{b}) && ! exists($opts{n})) { print STDERR "$comname: ERROR: Option -b cannot be used without option -n\n"; exit 1;};
+if (exists($opts{b}) && ! exists($opts{n})) { print STDERR "$command_name: ERROR: Option -b cannot be used without option -n\n"; exit 1;};
 
 $linecount=0;
 local $/ = "\n"; # enable line mode for all reads
 # if a parameter is given, use that as the input instead of STDIN
 if (scalar(@ARGV) > 0) {
-	$inputfile=$ARGV[0];
+	$inputfile = $ARGV[0];
 	unless (-e $inputfile) { exitwitherror("Can't find file $inputfile\n"); };
 	open my $fh, $inputfile or die "Cant open $inputfile: $!";
 	# read a line
@@ -118,7 +118,7 @@ if (scalar(@ARGV) > 0) {
 	# parameter not given, so read from STDIN
 	while (<>) {
 		$linecount++;
-		$line=$_;
+		$line = $_;
 		doline($line);
 	}
 }
@@ -132,8 +132,8 @@ for $restline (sort keys %lines) {
 	%collate = %{$lines{$restline}};
 	# sort the values and join by :, include counts if requested
 	@values = sort keys %collate;
-	$collate="";
-	for ($valuenum=0; $valuenum<=$#values; $valuenum++) {
+	$collate = "";
+	for ($valuenum = 0; $valuenum <= $#values; $valuenum++) {
 		if ($valuenum > 0) { $collate .= "$valuesep" };
 		$collate .= "$values[$valuenum]";
 		if (exists($opts{a})) {
@@ -162,7 +162,7 @@ sub doline ($) {
 	if (scalar(@items) < $collatecol) {
 		# ignore this line if requested by option -x
 		return if (exists($opts{x}));
-		print STDERR "$comname: ERROR: line $linecount has too few columns: ", scalar(@items), "\n"; exit 1; 
+		print STDERR "$command_name: ERROR: line $linecount has too few columns: ", scalar(@items), "\n"; exit 1; 
 	};
 	# extract the column to collate
 	$collate = splice(@items, $collatecol - 1, 1);
@@ -176,6 +176,6 @@ sub doline ($) {
 
 sub exitwitherror ($) {
 	my $string = shift;
-	print STDERR "$comname: ERROR: $string\n";
+	print STDERR "$command_name: ERROR: $string\n";
 	exit 0;
 }

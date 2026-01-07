@@ -15,22 +15,18 @@ binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
 binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
 $/="\n";           # set <READLINE> terminator to newline
 
-my $comname = basename $0;
-my $dir = cwd();
-my $pwd=cwd();
-
-
+my $command_name = basename $0;
 
 # Define variables
 my ($syntax, %opts, $sourceFile, $compareFile, %compareLines, $ignorelineendings, $reverse);
 
-$syntax=qq^
-$comname outputs only those lines in file 1 that do not appear in file 2.
+$syntax = qq^
+$command_name outputs only those lines in file 1 that do not appear in file 2.
 
 Syntax: 
-$comname -? 
-$comname file1 file2
-$comname <(command 1) <(command 2)
+$command_name -? 
+$command_name file1 file2
+$command_name <(command 1) <(command 2)
 
 ^;
 
@@ -65,7 +61,7 @@ unless (-e "$compareFile") { die "ERROR: can't find compare file at $compareFile
 open(my $f, '<', $compareFile) or print STDERR "Can't read $compareFile\n" && next; 
 while (my $line = <$f>) { 
     if ($ignorelineendings == 1) { $line =~ s%[\n\r]+%%g; }
-    $compareLines{$line} =1;
+    $compareLines{$line} = 1;
 }
 close $f;
 

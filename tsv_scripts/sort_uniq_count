@@ -22,19 +22,26 @@ Then re-sorts the output numerically by the count
 
 Syntax of $command_name:
 
-[ LINES ] | $command_name [ -s sortby ] [ -r ]
+[ LINES ] | $command_name [ -s [ l | c | count | line ] ]  [ -o [ a | n | alpha | line ] ] [ -r ]
 
 OPTIONAL OPTIONS:
--s sortby specify whether to sort by count of lines (default) or line text
--r      Reverse the sort output
+-s sortby     specify whether to sort by count of lines (default) or line text
+                c or l or count or line
+-o ordertype  specify the order type to use for count by line text (alpha, numerical)
+                a or n or alpha or numeric or number
+                If sortby is count then ordertype is numeric
+-r            Reverse the sort output
 
 ";
 
+# set default sort by to count of lines
+sortby="count";
 # read command options
-while getopts "rs:h?" getopts_option
+while getopts "rs:o:h?" getopts_option
 do
   case $getopts_option in
    s) sortby="$OPTARG";;
+   o) ordertype="$OPTARG";;
    r) reverse=1;;
    h | \? ) echo "$help_usage"; exit 0;
   esac
@@ -44,29 +51,45 @@ shift $((OPTIND - 1));
 
 # validate options
 
-if [ "$( echo "$sortby" | egrep "^(n|number|l|line)$")" == "" ]; then 
-  echo "Option -s must be one of: n number;$help_usage" 1>&2 && exit 0;
+if [ "$( echo "$sortby" | egrep "^(c|count|l|line)$")" == "" ]; then 
+  echo "Option -s must be one of: c count l line;$help_usage" 1>&2 && exit 0;
 fi;
 
-# normalise sortby to full words
-[ "$sortby" = "n" ] && sortby="number";
+# normalise sortby to full word
+[ "$sortby" = "c" ] && sortby="count";
+
+# ordertype is numeric if sortby is count
+[ "$sortby" = "count" ] && ordertype="numeric";
+
+# normalise ordertype to full word
+[ "$ordertype" = "n" ] && ordertype="numeric";
 
 if [ $reverse -eq 0 ]; then
   # output order is not reversed
-  if [ $sortby == "number" ]; then
-    # output by count of line instances
+  if [ $sortby == "count" ]; then
+    # output by count of line instances, numeric sort
     awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k1,1n
   else
-    # order by line text
-    awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2
+    if [ $ordertype == "numeric" ]; then
+      # order by line text, numeric sort
+      awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2n
+    else
+      # order by line text, alpha sort
+      awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2
+    fi;
   fi;
 else
   # output order is reversed
-  if [ $sortby == "number" ]; then
+  if [ $sortby == "count" ]; then
     # output by count of line instances
     awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=n; i>=1; i--) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k1,1nr
   else
-    # order by line text
-    awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2r
+      if [ $ordertype == "numeric" ]; then
+      # order by line text, numeric sort
+      awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2nr
+    else
+      # order by line text, alpha sort
+      awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2r
+    fi;
   fi;
 fi;
