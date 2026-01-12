@@ -78,5 +78,6 @@ declare namespace at="http://publications.europa.eu/ontology/authority/";
 declare namespace atold="http://publications.europa.eu/resource/authority/";
 declare namespace functx="http://www.functx.com";
 
-import module namespace pmd="http://www.pmdonohoe.com/functions" at "VAR:!script_path_java!/pmd_functions.xq";
+
+import module namespace pmd="http://www.pmdonohoe.com/functions" at "VAR:!java_path:script_path!/pmd_functions.xq";
 

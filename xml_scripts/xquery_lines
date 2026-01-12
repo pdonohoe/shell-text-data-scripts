@@ -202,20 +202,53 @@ this_prolog="$prolog $xquery_prolog";
 # replace any variables defined
 
 # count the number of replacements to make
-rep_count=$(echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_]*!' | sort | uniq | wc -l);
+rep_count=$(echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_:]*!' | sort | uniq | wc -l);
 if [ "$rep_count" -eq "0" ]; then
 	echo "$this_prolog";
 else
 	rep_no=0;
-	this_prolog="$(
+	# get list of unique variable references , separated by spaces
+	vars_to_replace=$(echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_:]*!' | sort | uniq | xargs echo);
 	# loop through variable references
-	echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_]*!' | sort | uniq | while read -r var_ref_string; do
+	# echo "$this_prolog" | egrep -o 'VAR:![A-Za-z_:]*!' | sort | uniq | while read -r var_ref_string; do
+	# infinite loop
+	while true; do
+	# get next variable from list
+	var_ref_string=${vars_to_replace%% *};
+	# remove first variable from remaining list
+	vars_to_replace=${vars_to_replace#* };
 	# increment the current replacement number
 	rep_no=$(( rep_no + 1));
 	# get the variable name from the reference string
 	var_ref=$(echo "$var_ref_string" | sed 's%^VAR:!%%;s%!%%');
+	# separate the variable name into any prefix denoting variable value processing,
+	# and the variable name itself, using :
+	var_ref_name=${var_ref#*:};
+	var_ref_prefix=${var_ref%:*};
+	# parameter expansion of type % returns the full value if the expression is not found
+	# in this case, set the prefix to empty text
+	if [ "$var_ref_prefix" == "$var_ref_name" ]; then 
+		var_ref_prefix="";
+	fi;
+
+	# test that the variable is set, and is not the empty string
+	if [ -z "${!var_ref_name}" ]; then
+		echo "ERROR: $command_name: variable ${var_ref_name} is not defined or is empty;$help_usage" 1>&2; exit 1 ;
+	fi
+
 	# get the value of the variable
-	var_replacement=${!var_ref};
+	var_replacement=${!var_ref_name};
+	
+	# do any variable processing indicated by the prefix, if it exists
+	# note: currently, only prefix "java_path" is supported
+	if [ "$var_ref_prefix" != "" ]; then
+		if [ "$var_ref_prefix" == "java_path" ]; then
+			# convert the variable from a Unix path to a Java path
+			var_replacement="$(echo "$var_replacement" | sed 's%/\([a-z]\)/%/\1:/%';)";
+		else
+			echo "ERROR: $command_name: $var_ref_prefix is not a recognised variable processing prefix;$help_usage" 1>&2; exit 1 ;
+		fi;
+	fi;
 	# if the variable referenced exists and has a value
 	if [ "$var_replacement" != "" ]; then
 		# replace the variable reference string with the value of the variable
@@ -226,9 +259,12 @@ else
 		fi;
 	fi
 	# output the replaced text if the last replacement has been reached
-	if [ "$rep_no" -eq "$rep_count" ]; then echo "$this_prolog"; fi;
+	#if [ "$rep_no" -eq "$rep_count" ]; then echo "$this_prolog"; fi;
+	# exit infinite loop if variable is last variable in list
+	if [ "$(echo "$vars_to_replace" | grep -F ' ')" == "" ]; then
+		break;
+	fi;
 	done;
-)";
 fi
 
 

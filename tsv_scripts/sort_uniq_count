@@ -22,7 +22,7 @@ Then re-sorts the output numerically by the count
 
 Syntax of $command_name:
 
-[ LINES ] | $command_name [ -s [ l | c | count | line ] ]  [ -o [ a | n | alpha | line ] ] [ -r ]
+[ LINES ] | $command_name [ -s [ l | c | count | line ] ]  [ -o [ a | n | alpha | numeric | number ] ] [ -r ]
 
 OPTIONAL OPTIONS:
 -s sortby     specify whether to sort by count of lines (default) or line text
@@ -64,13 +64,13 @@ fi;
 # normalise ordertype to full word
 [ "$ordertype" = "n" ] && ordertype="numeric";
 
-if [ $reverse -eq 0 ]; then
+if [ "$reverse" -eq 0 ]; then
   # output order is not reversed
   if [ $sortby == "count" ]; then
     # output by count of line instances, numeric sort
     awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k1,1n
   else
-    if [ $ordertype == "numeric" ]; then
+    if [ "$ordertype" == "numeric" ]; then
       # order by line text, numeric sort
       awk 'BEGIN {OFS=""; } END {n=asorti(myhash, sorted); for (i=1; i<=n; i++) { print myhash[sorted[i]], "\t", sorted[i]; } } { myhash[$0]++; }' | sort -t$'\t' -k2n
     else
