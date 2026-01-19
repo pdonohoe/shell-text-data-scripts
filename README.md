@@ -36,7 +36,7 @@ Most scripts accept the -? option, which will print out help on the script synta
 
 ### POSIX compatibility versus bash-specific syntax
 
-These scripts have been developed and tested using the bash shell. Some effort has been made to make these scripts *partly* compatible with other shell flavours by replacing bashisms with POSIX-compliant code (see [Bashism](https://mywiki.wooledge.org/Bashism), [DashAsBinSh](https://wiki.ubuntu.com/DashAsBinSh) and [checkbashism](https://github.com/rocker-org/drd/blob/master/checkbashisms)). However, I have not found easy replacements for arrays in bash, so these remain. If you intend to use these scripts in other shells, please check their compatibility before relying on them.
+These scripts have been developed and tested using the bash shell. Some effort has been made to make these scripts *partly* compatible with other shell flavours by replacing bashisms with POSIX-compliant code (see [Bashism](https://mywiki.wooledge.org/Bashism), [DashAsBinSh](https://wiki.ubuntu.com/DashAsBinSh) and [checkbashism](https://github.com/rocker-org/drd/blob/master/checkbashisms)). However, I have not found easy replacements for: a) arrays, or b) indirect variable references  (${!name}) in bash, so these remain. If you intend to use these scripts in other shells, please check their compatibility before relying on them.
 
 I have also used the mktemp command in some scripts. mktemp is not specified (yet) by POSIX, but it is widely available. See [how portable is mktemp](https://stackoverflow.com/questions/2792675/how-portable-is-mktemp1) for details. I have tried to use only the most portable options.
 

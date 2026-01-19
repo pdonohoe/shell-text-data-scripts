@@ -24,15 +24,15 @@ Syntax of $command_name:
 $command_name -d delimiter -f column
 
 REQUIRED OPTIONS:
--f      Field to uniq on
+-c      column to uniq on
 
 OPTIONAL OPTIONS:
 -d      character used as delimiter (TAB is used as a default)
 -l      output only the last line with the unique value in the given column
 
 Examples: 
-$command_name -f 6
-$command_name -d; -f 3
+$command_name -c 6
+$command_name -d; -c 3
 
 ";
 
@@ -40,38 +40,38 @@ sep="$(printf '\t')";
 last_line=0;
 
 # read command options
-while getopts "f:d:lh?" getopts_option
+while getopts "c:d:lh?" getopts_option
 do
   case $getopts_option in
-  d ) sep="$OPTARG";;	
-	f ) field="$OPTARG";;
-  l ) last_line=1;; 
-	h | \? ) echo "$help_usage"; exit 0;
+    d ) sep="$OPTARG";;	
+    c ) column="$OPTARG";;
+    l ) last_line=1;; 
+    h | \? ) echo "$help_usage"; exit 0;
   esac
 done;
 # move shell command-line-argument pointer to end of options
 shift $((OPTIND - 1));
 
 # validate options
-# option -f is required 
-[ "$field" = "" ] && echo "Must specify field -f;$help_usage" 1>&2 && exit 0;
+# option -c is required 
+[ "$column" = "" ] && echo "Must specify columns -c;$help_usage" 1>&2 && exit 0;
 
 if [ "$last_line" -eq 0  ]; then
 
-awk -v col="$field" -v sep="$sep" 'BEGIN { FS = sep } {
-    # Keep count of the fields in second column
+awk -v col="$column" -v sep="$sep" 'BEGIN { FS = sep } {
+    # Keep count of the value of the given column
     count[$col]++;
 
     # Save the line the first time we encounter a unique field
     if (count[$col] == 1)
         first[$col] = $0;
 
-    # If we encounter the field for the second time, print the
+    # If we encounter the column value for the second time, print the
     # previously saved line
     if (count[$col] == 2)
         print first[$col];
 
-    # From the second time onward. always print because the field is
+    # From the second time onward. always print because the column is
     # duplicated
     if (count[$col] > 1)
         print
@@ -79,14 +79,14 @@ awk -v col="$field" -v sep="$sep" 'BEGIN { FS = sep } {
 
 else
 :
-awk -v col="$field" -v sep="$sep" 'BEGIN { FS = sep } 
+awk -v col="$column" -v sep="$sep" 'BEGIN { FS = sep } 
 END { 
     for (i in order) {
       col=order[i];
       if (count[col] > 1) { print lines[col]; }
     }
 } {
-    # Keep count of the fields in second column
+    # Keep count of the value of the given column
     count[$col]++;
     
     # append to an array of the field in the second column, if it has not already been added

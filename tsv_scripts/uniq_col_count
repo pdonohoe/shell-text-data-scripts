@@ -18,29 +18,29 @@ help_usage="
 
 Syntax of $command_name:
 
-$command_name -d delimiter -f column
+$command_name -d delimiter -c column
 
 REQUIRED OPTIONS:
--f      Field to uniq on
+-c      column to uniq on
 
 OPTIONAL OPTIONS:
 -d      character used as delimiter (TAB is used as a default)
 
 Examples: 
-$command_name -f 6
-$command_name -d; -f 3
+$command_name -c 6
+$command_name -d; -c 3
 
 ";
 
 sep="$(printf '\t')";
 
 # read command options
-while getopts "f:d:h?" getopts_option
+while getopts "c:d:h?" getopts_option
 do
   case $getopts_option in
     d ) sep="$OPTARG";;	
-	f ) field="$OPTARG";; 
-	h | \? ) echo "$help_usage"; exit 0;
+    c ) column="$OPTARG";; 
+    h | \? ) echo "$help_usage"; exit 0;
   esac
 done;
 # move shell command-line-argument pointer to end of options
@@ -48,14 +48,14 @@ shift $((OPTIND - 1));
 
 # validate options
 # option -f is required 
-[ "$field" = "" ] && echo "Must specify field -f;$help_usage" 1>&2 && exit 0;
+[ "$column" = "" ] && echo "Must specify column -f;$help_usage" 1>&2 && exit 0;
 
-awk -v col="$field" -v sep="$sep" 'BEGIN { FS = sep; OFS = "\t"; uniqc=0 } 
+awk -v col="$column" -v sep="$sep" 'BEGIN { FS = sep; OFS = "\t"; uniqc=0 } 
 END { for (myindex in myarray) {myitem=myarray[myindex]; print (count[myitem], myhash[myitem]); }}
 {
-    # Keep count of the fields in second column
+    # Keep count of the value of the given column
     count[$col]++;
-    # Remember the line the first time we encounter a unique field
+    # Remember the line the first time we encounter a unique column
     if (count[$col] == 1) {
         uniq_count++;
         myhash[$col]=$0;
