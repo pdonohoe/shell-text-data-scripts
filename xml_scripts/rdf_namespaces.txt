@@ -1,31 +1,4 @@
 
-declare namespace xsi="http://www.w3.org/2001/XMLSchema-instance";
-declare namespace xs="http://www.w3.org/2001/XMLSchema";
-declare namespace xsd="http://www.w3.org/2001/XMLSchema";
-declare namespace fn="http://www.w3.org/2005/xpath-functions";
-declare namespace map="http://www.w3.org/2005/xpath-functions/map";
-declare namespace math="http://www.w3.org/2005/xpath-functions/math";
-declare namespace array="http://www.w3.org/2005/xpath-functions/array";
-declare namespace xsl="http://www.w3.org/1999/XSL/Transform";
-declare namespace schold="http://www.ascc.net/xml/schematron";
-declare namespace iso="http://purl.oclc.org/dsdl/schematron";
-declare namespace xhtml="http://www.w3.org/1999/xhtml";
-declare namespace html="http://www.w3.org/TR/REC-html40";
-declare namespace sch="http://purl.oclc.org/dsdl/schematron";
-declare namespace svrl="http://purl.oclc.org/dsdl/svrl";
-
-declare namespace saxon="http://saxon.sf.net/";
-declare namespace output="http://www.w3.org/2010/xslt-xquery-serialization";
-
-declare namespace office="urn:oasis:names:tc:opendocument:declare namespace office:1.0";
-declare namespace style="urn:oasis:names:tc:opendocument:declare namespace style:1.0";
-declare namespace table="urn:oasis:names:tc:opendocument:declare namespace table:1.0";
-declare namespace text="urn:oasis:names:tc:opendocument:declare namespace text:1.0";
-declare namespace util="java:java.util.UUID";
-
-declare namespace o="urn:schemas-microsoft-com:office:office";
-declare namespace x="urn:schemas-microsoft-com:office:excel";
-declare namespace ss="urn:schemas-microsoft-com:office:spreadsheet";
 
 declare namespace adms="http://www.w3.org/ns/adms#";
 declare namespace core="http://www.w3.org/2004/02/skos/core#";
@@ -58,8 +31,3 @@ declare namespace sf="http://www.opengis.net/ont/sf#";
 declare namespace locn="http://www.w3.org/ns/locn#";
 declare namespace at="http://publications.europa.eu/ontology/authority/";
 declare namespace atold="http://publications.europa.eu/resource/authority/";
-declare namespace functx="http://www.functx.com";
-
-
-import module namespace pmd="http://www.pmdonohoe.com/functions" at "VAR:!java_path:script_path!/pmd_functions.xq";
-
