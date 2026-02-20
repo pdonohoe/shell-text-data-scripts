@@ -68,8 +68,16 @@ declare function pmd:index-of-string-first
 	 ($arg as xs:string, $substring as xs:string, $pos as xs:integer) as xs:integer? {
 	let $realpos := if ($pos > 0) then $pos else if ($pos = 0) then 1 else if ((fn:string-length($arg) + $pos + 1) > 0) then fn:string-length($arg) + $pos + 1 else 1
 	let $index := functx:index-of-string-first(fn:substring($arg, $realpos), $substring)
-	let $returnpos := if ($index instance of xs:integer) then $realpos + $index - 1 else $realpos - 1
+	let $returnpos := if ($index instance of xs:integer) then $realpos + $index - 1 else 0
 	return $returnpos
+};
+
+
+(: returns the string up to and including the first instance of the search string :)
+declare function pmd:substring-up-to-first 
+	 ($arg as xs:string, $substring as xs:string) as xs:string {
+	let $string-after-first := substring-after($arg, $substring)
+	return substring($arg, 1, string-length($arg) - string-length($string-after-first))
 };
 
 
@@ -153,7 +161,7 @@ declare function pmd:find-first-slash
 			else
 			let $string := fn:substring($xpath, 1, $nextpos)
 				return if (fn:string-length(fn:replace($string, '\[', '')) = fn:string-length(fn:replace($string, '\]', ''))) then $nextpos else 
-				  pmd:find-first-slash($xpath, pmd:index-of-string-first($xpath, '/', $nextpos + 1))
+				  pmd:find-first-slash($xpath, $nextpos + 1)
 };
 
 
@@ -234,6 +242,7 @@ return fn:string-join(($path_1, $path_2, $relative_path), '&#10;')
 
 (: returns the common XPath of two XPaths :)
 (: this function assumes that both parameters are valid XPath strings :)
+(: primitive: xpaths must not contain either [ or ] inside a string :)
 declare function pmd:common-xpath 
      ($xpath1 as xs:string, $xpath2 as xs:string) as xs:string {
     (: find the position of the first different character :)
@@ -250,6 +259,7 @@ declare function pmd:common-xpath
 };
 
 (: splits an XPath into a sequence of steps :)
+(: primitive: xpath must not contain either [ or ] inside a string :)
 declare function pmd:xpath-to-steps
 	($xpath  as xs:string) as xs:string* {
 	let $firstslash := pmd:find-first-slash($xpath, 1)
@@ -261,7 +271,8 @@ declare function pmd:xpath-to-steps
 
 
 
-(: given two XPaths as strings, returns a string of the relative XPath between the two. Primitive: the XPaths must not contain either [ or ] inside a string :)
+(: given two XPaths as strings, returns a string of the relative XPath between the two. :)
+(: primitive: the XPaths must not contain either [ or ] inside a string :)
 declare function pmd:get-relative-xpath
    ( $from-xpath as xs:string, $to-xpath as xs:string, $first-diff-ancestor-predicates-important as xs:boolean) as xs:string* {
    let $dummy := ""

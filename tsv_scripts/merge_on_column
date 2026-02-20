@@ -1,0 +1,240 @@
+#!/usr/bin/perl
+
+# This script reads lines from a file or STDIN,
+# and merges those lines into a given file.
+# The merge is done on the given columns. 
+# For each line in the first file, the value of the given column
+# is retrieved. The first line in the second file or STDIN
+# that has the same value in it's given column is appended to the line.
+# Any lines in the second file or STDIN that have not been matched with
+# a line in the first file, are either discarded, or appended to the end of 
+# the output.
+# the input column separator can be specified, default TAB
+# the output column separator can be specified, default TAB
+
+# example of collating on column 2:
+# a b c
+# d b f
+# g z h
+
+# b a c d f
+# g z f
+
+
+use strict;
+use warnings;
+use utf8;
+use open qw/:std :utf8/;
+
+use Getopt::Std;
+
+use Cwd;
+use Cwd qw(abs_path cwd getcwd);
+use File::Basename;
+use Data::Dumper;
+
+sub exitwitherror ($);
+sub doline ($);
+
+########### FILE HEADER
+
+binmode(STDOUT, ":utf8");          #treat as if it is UTF-8
+binmode(STDIN, ":encoding(utf8)"); #actually check if it is UTF-8
+
+
+my $command_name = basename $0;
+# set a variable for the TAB character
+my $tab = "\t";my $nl="\n";
+
+# set variables
+my (%opts, $inputfile, $mergefile, $f, $line, @items, $collate, %lines, $linecount, $mergecol, $collatecol, $inputsep, $outputsep, %foundvalues, %foundalready, @lines);
+
+
+########### HELP 
+
+# set the command syntax help text
+my $syntax = qq^
+Collates lines (STDIN or file) on a given column
+
+Syntax of $command_name:
+$command_name -m FILE1_COLUMN -c FILE2_COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] FILE1 FILE2
+LINES | $command_name -m STDIN_COLUMN -c FILE_COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] FILE
+
+REQUIRED OPTIONS:
+-m    The number of the column of FILE1 / STDIN to merge to
+-c    The number of the column of FILE2 / FILE to merge from
+
+OPTIONAL OPTIONS:
+-s    The input separator of the collated values, default TAB
+-a    The output separator of the collated values, default TAB
+-x    Ignore lines with too few columns
+-i    Append unmatched lines from FILE1 / STDIN to output file
+
+-?    Prints this help, does not run the script.
+
+^;
+
+# set the text for more help on this command
+my $morehelp = "Use $command_name -? for full help on this command
+";
+
+# set command help examples text
+my $commandhelp = "
+Examples:
+
+$command_name -m 5 -c 1 FILE1 FILE2
+";
+# set command argument error message
+my $arg_error = qq£;
+
+Usage
+$command_name [ -x ] [ -i ] -m FILE1_COLUMN -c FILE2_COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] FILE1 FILE2
+LINES | $command_name [ -x ] [ -i ] -m STDIN_COLUMN -c FILE_COLUMN [ -s SEPARATOR ] [ -a SEPARATOR ] FILE
+
+Options
+-? : Print this summary
+£;
+
+
+############# GETOPTS
+
+unless (getopts('?hx?m:c:s:a:', \%opts)) {print STDERR "$command_name: ERROR: invalid option found\n$syntax"; exit 0;}
+if (exists $opts{'?'}) { print STDOUT $syntax; exit -1;}
+
+# option -m is required
+unless (exists $opts{'m'}) { print STDERR "$command_name: ERROR: option -m is required\n"; exit -1; }
+
+# option -c is required
+unless (exists $opts{'c'}) { print STDERR "$command_name: ERROR: option -c is required\n"; exit -1; }
+
+# there must be exactly one or two parameters
+if ( scalar(@ARGV) < 1 || scalar(@ARGV) > 2) {print STDERR "$command_name: ERROR: invalid number of parameters"; exit -1; }
+
+$collatecol = $opts{c};
+$mergecol = $opts{m};
+
+$inputsep = (exists($opts{s})) ? $opts{s} : $tab;
+$outputsep = (exists($opts{C})) ? "\x0D" : (exists($opts{a})) ? $opts{a} : $tab;
+
+
+
+# validate options
+
+# option m should be a positive integer
+unless ($mergecol =~ m%^[1-9]\d*$%) { print STDERR "$command_name: ERROR: Option -m must be a positive integer: $mergecol\n"; exit 1;};
+
+# option c should be a positive integer
+unless ($collatecol =~ m%^[1-9]\d*$%) { print STDERR "$command_name: ERROR: Option -c must be a positive integer: $collatecol\n"; exit 1;};
+
+# first file must exist
+$mergefile = $ARGV[0];
+unless (-e $mergefile) { exitwitherror("Can't find file $mergefile\n"); };
+
+# read FILE2 or STDIN into hash
+$linecount = 0;
+local $/ = "\n"; # enable line mode for all reads
+# if a parameter is given, use that as the input instead of STDIN
+if (scalar(@ARGV) > 1) {
+	$inputfile = $ARGV[1];
+	unless (-e $inputfile) { exitwitherror("Can't find file $inputfile\n"); };
+	open my $fh, $inputfile or die "Cant open $inputfile: $!";
+	# read a line
+	while ($line = <$fh>) { 
+		$linecount++;
+		doline($line);
+	}
+	close $fh;
+} else {
+	# parameter not given, so read from STDIN
+	while (<>) {
+		$linecount++;
+		$line = $_;
+		doline($line);
+	}
+}
+
+#print join("\n", sort keys %lines), "\n";
+#print Dumper(\%lines) ;
+
+# loop through lines from first file
+open my $fh, $mergefile or die "Cant open $mergefile: $!";
+	while ($line = <$fh>) { 
+	# remove trailing EOL characters
+	$line =~ s%[\n\r]+%%g;
+	# split the line into its columns
+	@items = split(/$inputsep/, $line);
+	if (scalar(@items) < $collatecol) {
+		# exit with error if this line doesn't contain the merge column unless requested by option -x
+		if (not(exists($opts{x}))) {
+			print STDERR "$command_name: ERROR: line $linecount has too few columns: ", scalar(@items), "\n"; exit 1; 
+		}
+		print join($outputsep, @items), "\n";  
+	} else {
+		# get the value of the merge column from this line
+		$collate = $items[$mergecol - 1];
+		# try to find merge column value in hash
+		if (exists($lines{$collate})) {
+			# if found, merge the lines
+			print join($outputsep, @items), $outputsep, $lines{$collate}, "\n";
+			# add the found value to the foundvalues hash
+			$foundvalues{$collate}++;
+		} else {
+			# if not found, output this line
+			print join($outputsep, @items), "\n"; 
+		}
+	}
+}
+
+# if option -i is given, output the unmatched lines from FILE2 / STDIN 
+if (exists($opts{i})) {
+	for $line (@lines) {
+		@items = split(/$inputsep/, $line);
+		if (scalar(@items) < $collatecol) {
+			print $line, "\n";
+		} else {
+			# get the value of the collate column
+			$collate = $items[$collatecol - 1];
+			# if the line's collate value was found
+			if (exists($foundvalues{$collate})) {
+				# if it's not the first time print the line
+				if (exists($foundalready{$collate})) {
+					print $line, "\n";
+				} else {
+					# add the value to the foundalready hash
+					$foundalready{$collate}++;
+				}
+			}
+		}
+
+	}
+}
+exit 0;
+
+# function doline - gets value from collate column, create hash of rest of line and value
+sub doline ($) {
+	my $line = shift;
+	# remove trailing EOL characters
+	$line =~ s%[\n\r]+%%g;
+	# add the line to the lines array
+	push @lines, $line;
+	# split the line into its columns
+	@items = split(/$inputsep/, $line);
+	if (scalar(@items) < $collatecol) {
+		# ignore this line if requested by option -x
+		if (not(exists($opts{x}))) {
+			print STDERR "$command_name: ERROR: line $linecount has too few columns: ", scalar(@items), "\n"; exit 1; 
+		}
+	}
+	# get the value of the collate column
+	$collate = splice(@items, $collatecol - 1, 1);
+	# add the rest of the columns (using output separator) to the hash using the value of the collate column
+	unless (exists($lines{$collate})) {
+		$lines{$collate} = join($outputsep, @items);
+	}
+}
+
+sub exitwitherror ($) {
+	my $string = shift;
+	print STDERR "$command_name: ERROR: $string\n";
+	exit 0;
+}

@@ -62,10 +62,10 @@ REQUIRED OPTIONS:
 -c      The number of the column to collate on
 
 OPTIONAL OPTIONS:
--s	  The input separator of the collated values, default TAB
--a	  The output separator of the collated values, default TAB
--C	  Use CR (0D) for the output separator of the collated values
--x	  Ignore lines with too few columns
+-s    The input separator of the collated values, default TAB
+-a    The output separator of the collated values, default TAB
+-C    Use CR (0D) for the output separator of the collated values
+-x    Ignore lines with too few columns
 
 -?     Prints this help, does not run the script.
 
@@ -87,7 +87,7 @@ my $arg_error = qq£;
 Usage
 $command_name -c COLUMN [ -s SEPARATOR ] [ -C | -a SEPARATOR ] [ -x ] FILE
 LINES | $command_name -c COLUMN [ -s SEPARATOR ] [ -C | -a SEPARATOR ] [ -x ]
-	   
+     
 Options
 -? : Print this summary
 £;

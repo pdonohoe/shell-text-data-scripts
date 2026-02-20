@@ -1,0 +1,131 @@
+#!/bin/sh
+# This script is a variation on uniq -d
+# Given a delimiter and a number of column numbers, it prints out only those lines
+# where the values in the columns are duplicated in the file
+# The lines do not need to be sorted
+# Output lines will be in a different order; as this script reads from STDIN, a two-pass operation on a file as suggested in 
+# https://unix.stackexchange.com/questions/183428/how-to-run-awk-twice-across-the-same-file cannot be used.
+# Thus, to retain the original order of lines, the lines themselves would need to be stored, either in a temporary file,
+# or in an awk array. This would be expensive for large files.
+# This command can only accept input from STDIN, arguments are ignored
+# See https://stackoverflow.com/questions/1450085/list-only-duplicate-lines-based-on-one-column-from-a-semi-colon-delimited-file
+
+# get name of this script
+command_name=$(basename "$0");
+# get directory of this script
+script_path=$(cd "$(dirname "$0")" || exit; pwd);
+if [ "$script_path" = "" ] || [ ! -d "$script_path" ] || [ ! -e "$script_path/$command_name" ]; then echo "Variables \$command_name and \$script_path not set correctly for script $command_name"; exit 1; fi;
+
+# command help
+help_usage="
+
+Syntax of $command_name:
+
+$command_name -d delimiter -c columns
+
+REQUIRED OPTIONS:
+-c      Columns to uniq on (comma-separated)
+
+OPTIONAL OPTIONS:
+-d      character used as delimiter (TAB is used as a default)
+-l      output only the last line with the unique value in the given column
+
+Examples: 
+$command_name -c 6,8
+$command_name -d; -c 3,1,7
+
+";
+
+sep="$(printf '\t')";
+last_line=0;
+
+# read command options
+while getopts "c:d:lh?" getopts_option
+do
+  case $getopts_option in
+    d ) sep="$OPTARG";;	
+    c ) columns="$OPTARG";;
+    l ) last_line=1;; 
+    h | \? ) echo "$help_usage"; exit 0;
+  esac
+done;
+# move shell command-line-argument pointer to end of options
+shift $((OPTIND - 1));
+
+# validate options
+# option -c is required 
+[ "$columns" = "" ] && echo "Must specify columns -c;$help_usage" 1>&2 && exit 0;
+
+if [ "$last_line" -eq 0  ]; then
+
+awk -v cols="$columns" -v sep="$sep" 'BEGIN { FS = sep; n = split(cols, colnums, /,/); } {
+    # get array of column numbers
+    
+    # get combined text from those columns
+    combined = "";
+    for (c = 1; c <= n; c++) {
+      colnum = colnums[c]; 
+      if (c > 1) { combined = combined sep};
+      combined = combined $colnum;
+    }
+    # Keep count of the combined values of the columns
+    count[combined]++;
+
+    # Save the line the first time we encounter a unique columns
+    if (count[combined] == 1)
+        first[combined] = $0;
+
+    # If we encounter the columns for the second time, print the
+    # previously saved line
+    if (count[combined] == 2)
+        print first[combined];
+
+    # From the second time onward. always print because the columns is
+    # duplicated
+    if (count[combined] > 1)
+        print
+}'
+
+else
+:
+awk -v cols="$columns" -v sep="$sep" 'BEGIN { FS = sep; n = split(cols, colnums, /,/); } 
+END { 
+    # create new array from positions, swapping combined value and position
+    for (combined in positions) {
+      position = positions[combined];
+      posorder[position] = combined;
+    }
+    # resort posorder array
+    n = asorti(posorder, sortedpos, "@ind_num_asc");
+    # loop through the sorted positions array, then print
+    # the line associated with that position
+    for (i = 1; i <= n; i++) {
+      print lines[posorder[sortedpos[i]]];
+    }
+
+    for (i in order) {
+      combined = order[i];
+      if (count[combined] > 1) { print lines[combined]; }
+    }
+} {
+    i++;
+    # get combined text from those columns
+    combined = "";
+    for (c = 1; c <= n; c++) {
+      colnum = colnums[c]; 
+      if (c > 1) { combined = combined sep};
+      combined = combined $colnum;
+    }
+    # Keep count of the combined values of the columns
+    count[combined]++;
+    
+    # if this is not the first instance of the combined values of the columns, 
+    #  overwrite the retained line for this combined value,
+    #  and overwrite the position for this combined value
+    if (count[combined] > 1) {
+      lines[combined] = $0;
+      positions[combined] = i;
+    }
+}'
+
+fi;

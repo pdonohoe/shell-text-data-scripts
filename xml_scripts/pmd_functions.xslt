@@ -408,7 +408,7 @@
 </namespaces>
 -->
 
-<!-- Given a namespace URI as a string, return the prefix used as defined in XML document 'list-of-namespaces.xml' -->
+<!-- Given a namespace URI as a string, return the prefix used as defined in an XML document listing namespaces -->
 <xsl:function name="pmd:namespace-uri-to-prefix-from-file" as="xs:string">
 	<xsl:param name="uri" as="xs:string"/>
 	<xsl:param name="xmlfile" as="xs:string"/>
@@ -420,10 +420,10 @@
 	</xsl:choose>
 </xsl:function>
 
-<!-- Given a namespace URI as a string, return the prefix used as defined in XML document 'list-of-namespaces.xml' -->
+<!-- Given a namespace URI as a string, return the prefix used as defined in XML document 'list_of_namespaces.xml' -->
 <xsl:function name="pmd:namespace-uri-to-prefix-default" as="xs:string">
 	<xsl:param name="uri" as="xs:string"/>
-	<xsl:variable name="defaultfile" select="'list-of-namespaces.xml'"/>
+	<xsl:variable name="defaultfile" select="'list_of_namespaces.xml'"/>
 	<xsl:sequence select="pmd:namespace-uri-to-prefix-from-file($uri, $defaultfile)"/>
 </xsl:function>
 

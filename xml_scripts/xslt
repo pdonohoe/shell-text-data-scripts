@@ -104,10 +104,23 @@ parameters[input_file]="$(getabsolutepath "$source_xml_file")";
 parameters[main_template]="$main_template";
 parameters[output_file]="$(getabsolutepath "$output_xml_file")";
 
-parameter_string="$(for p in "${!parameters[@]}"; do echo -n "${p}=\"${parameters[${p}]}\" "; done)";
-
-# add any given parameters to the $parameters variable
-parameter_string="$parameter_string $*";
+parameter_string="$(
+  for p in "${!parameters[@]}"; do
+    echo -n "${p}=\"${parameters[${p}]}\" ";
+  done;
+  for i; do
+    param=${i};
+    if [[ "$param" =~ = ]] then
+      paramname=${param%%=*};
+      paramval=${param#*=};
+      paramfixed=$(echo "$paramname""="'"'$paramval'"');
+      echo -n "${paramfixed} ";
+    else
+      echo -n "${param} ";
+    fi;  
+  done;
+  )";
+echo "$parameter_string";
 
 # debug tests
 #echo "source_xml_file:$source_xml_file"
