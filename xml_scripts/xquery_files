@@ -76,6 +76,7 @@ OPTIONAL OPTIONS:
 -x        Strips all XML namespaces from output
 -z        Serialization required. Replace &lt; with < etc
 -s        Show progress, one line per batch of XML files processed
+-m        Skip 'file exists' check, except for the first ten files
 
 -p FILE   Path to prolog file. Contents of prolog file prepended to the query
 OR
@@ -106,6 +107,7 @@ process_files_prolog_file="${script_path}/xquery_files_prolog";
 # get a dummy XML file to supply to the XMLfile parameter required for the Saxon XQuery implementation
 xml_file="${script_path}/empty.xml"
 
+# set default values
 prolog="";
 user_query_file="";
 user_prolog_file="";
@@ -117,9 +119,10 @@ test_query=0;
 collate_xml=0;
 serialize=0;
 show_progress=0;
+file_check=1;
 
 # read command options
-while getopts "cdeilostxzq:f:p:a:h?" getopts_option
+while getopts "cdeilmostxzq:f:p:a:h?" getopts_option
 do
   case $getopts_option in
     t ) test_query=1;;
@@ -136,6 +139,7 @@ do
     c ) collate_xml=1;;
     z ) serialize=1;;
     s ) show_progress=1;;
+    m ) file_check=0;;
     h | \? ) echo "$help_usage"; exit 0;
   esac
 done;
@@ -270,30 +274,43 @@ fi
 collate_xml_lines () { sed -r '$!{s%([^>])$%$1 %;1{h};1!{H};d};${H;x;s%[\n\r]+[\t ]+%%g}'; }
 
 
-# get the list of files as a string delimited with £, either from parameters to the command, or if none, from STDIN
+# get the list of files as a string delimited with !, either from parameters to the command, or if none, from STDIN
 file_list_string="";
 # get list of files into a string
 case $# in
 	# no files given as parameters to command, use STDIN
 	0) num_lines=0;
 		while IFS="$(printf '\n')" read -r file; do
-			file_list_string="${file_list_string}£${file}";
+			file_list_string="${file_list_string}!${file}";
 			num_lines=$((num_lines + 1));
 		done;;
-	*) num_lines=$#; file_list_string="$(for i in "$@"; do echo -n "£$i"; done;)";
+	*) num_lines=$#; file_list_string="$(for i in "$@"; do echo -n "!$i"; done;)";
 esac;
+
+# exit if number of files to process is greater than 10000
+[ "$num_lines" -gt 10000 ] && echo "ERROR: $command_name: cant process more then 10000 files" && exit 99;
+
+
 # remove first character of file_list_string
-file_list_string=$(printf %s "$file_list_string" |  sed 's%^.%%');
+file_list_string=$(printf "%s" "$file_list_string" |  sed 's%^.%%');
+
+#echo "num_lines:$num_lines" 1>&2;
+#echo "file_list_string:$file_list_string" 1>&2;
+
+# check that all files actually exist, limit to 10 if option -m specified
+filelist=();
+IFS='!' read -ra filelist <<< "$file_list_string";
+
+if [ "$file_check" -eq 0 ]; then max_check_files=10; else max_check_files=$num_lines; fi;
+file_i=0;
+while [ "$file_i" -lt "$max_check_files" ]; do
+	file=${filelist[$file_i]};
+	[ ! -e  "$file" ] && echo "ERROR: $command_name: cant find file $file" && exit 99;
+	file_i=$((file_i+1));
+done
 
 this_prolog="${this_prolog%%FILELISTSTRING*}${file_list_string}${this_prolog##*FILELISTSTRING}";
 this_prolog="${this_prolog%%CURRPATH*}${current_path}${this_prolog##*CURRPATH}";
-
-# check that all files actually exist
-filelist=();
-IFS='£' read -ra filelist <<< "$file_list_string";
-for file in "${filelist[@]}"; do
-[ ! -e  "$file" ] && echo "ERROR: $command_name: cant find file $file" && exit 99;
-done
 
 
 if [ "$user_query_file" != "" ]; then
@@ -337,7 +354,7 @@ if [ "$exit_code" != 0 ]; then exit $exit_code; fi;
 if [ "$strip_xml_namespaces" -ne 0 ]; then xq_result="$(echo "$xq_result" | sed 's% xmlns:[A-Za-z_][A-Za-z_0-9.-]*="[^"]*"%%g; s% xmlns="[^"]*"%%g' | sed ':a;$!{N;ba};s%[[:space:]]*>%>%g')"; fi;
 
 #if [ "$strip_string_element" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%^[[:space:]]*<xqstring>%%;s%</xqstring>[[:space:]]*$%%g;s%</xqstring><xqstring>%\n%g;')"; fi;
-if [ "$strip_string_element" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%[[:space:]]*<xqstring>%%g;s%</xqstring>[[:space:]]*%\n%g;' | sed '/^[[:space:]]*$/d')"; fi;
+if [ "$strip_string_element" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%[[:space:]]*<xqstring>%%g;s%</xqstring>[[:space:]]*%\n%g;s%[[:space:]]*<xqstring/>[[:space:]]*%\n%g' | sed '/^[[:space:]]*$/d')"; fi;
 
 if [ "$expand_empty_elements" -eq 1 ]; then xq_result="$(echo "$xq_result" | sed 's%<\([^>\t \n\r]*\)\([^>]*\)/>%<\1\2></\1>%g')"; fi;
 

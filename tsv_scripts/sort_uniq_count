@@ -35,7 +35,7 @@ OPTIONAL OPTIONS:
 ";
 
 # set default sort by to count of lines
-sortby="count";
+sortby="line";
 ordertype="alpha";
 
 # read command options

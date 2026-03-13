@@ -37,6 +37,10 @@ import module namespace functx="http://www.functx.com" at "functx-1.0.1-doc.xq";
    };
 
 
+
+(: sequence functions :)
+
+
  (: implements value-unique - values that occur in only one of the two sequences, in any order :)
  declare function pmd:value-unique
    ($arg1 as xs:anyAtomicType*, $arg2 as xs:anyAtomicType* )  as xs:anyAtomicType* {
@@ -44,6 +48,15 @@ import module namespace functx="http://www.functx.com" at "functx-1.0.1-doc.xq";
    let $result := for $val in fn:distinct-values(($arg1, $arg2)) return $val[not(.= $dups)]
    return $result
    };
+
+
+(: returns the count of the number of times a value occurs in a sequence :)
+declare function pmd:value-count
+  ( $value as xs:anyAtomicType, $seq as xs:anyAtomicType* )  as xs:integer {
+   let $count := count($seq[. = $value])
+   return $count
+ } ;
+
 
 
 
@@ -431,10 +444,24 @@ declare function pmd:get-list-of-files-from-node
 };
 
 
+(: read the given TSV file and convert to XML :)
+declare function pmd:get-xml-from-tsv-file
+	($source_file  as xs:string) as node() {
+	let $file := fn:replace($source_file, "^/([A-Za-z])/","/$1:/")
+	return if (not(fn:unparsed-text-available($file))) then <error>cant find file {$source_file}</error> else
+	let $text := fn:unparsed-text($file)
+	let $lines := fn:tokenize($text, '\r\n|\r|\n')
+	return <list>{
+		for $line in $lines
+		let $cols := fn:tokenize($line, '\t')
+		return element row {
+			for $col at $pos in $cols
+			return element { concat("col", $pos) } { $col }
+		}
+	}</list>
+};
+
 (: node functions :)
-
-
-
 
 (: returns the name of the given element, and its sequence number as a predicate if there are more than one instance within its parent :)
 (: Adapted from functx:path-to-node-with-pos, FunctX XSLT Function Library :)

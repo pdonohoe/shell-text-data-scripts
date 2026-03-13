@@ -21,7 +21,7 @@ help_usage="
 
 Syntax of $command_name:
 
-$command_name -d delimiter -f column
+$command_name [ -d delimiter ] -c column
 
 REQUIRED OPTIONS:
 -c      column to uniq on

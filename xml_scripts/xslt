@@ -120,7 +120,7 @@ parameter_string="$(
     fi;  
   done;
   )";
-echo "$parameter_string";
+# echo "$parameter_string";
 
 # debug tests
 #echo "source_xml_file:$source_xml_file"
